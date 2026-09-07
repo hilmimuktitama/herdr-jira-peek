@@ -45,6 +45,9 @@ unreleased until every applicable item is verified.
 - [x] Original owned shellcheck 0.11.0 run passed for
   `config.example.sh scripts/*.sh tests/*.sh`.
 - [x] Full CI verification passed on macOS and Linux for `552fd2a`.
+- [ ] Investigate the intermittent macOS PTY paging timeout. The run for
+  `bce0234` passed on retry, and five local PTY runs passed; the cause remains
+  unresolved. See [CI run 34080079774](https://github.com/hilmimuktitama/herdr-jira-peek/actions/runs/34080079774).
 
 The original checks were:
 
@@ -55,18 +58,20 @@ done
 sh tests/manifest.sh
 sh tests/run.sh
 ```
-- [ ] Using an independent Jira site and permitted test account, run a real
-  smoke test: setup, successful doctor, then the named `peek` action with an
-  allowed issue key in the source pane. Use no work data; remove test state.
+- [x] Record maintainer-reported manual validation: on 2026-09-07, the maintainer
+  confirmed the installed plugin was tested and works. Individual actions were
+  not independently observed; no site details, issue data, or private
+  configuration were collected for this record.
 - [x] Include [public screenshots](README.md#quick-tour) using entirely
   fictional Jira content and a reserved test hostname. Do not publish real
   issue keys, URLs, descriptions, comments, tokens, or tenant details.
 
 ## Real smoke checklist
 
-Using an independent Jira site and permitted test account, verify Herdr >= 0.8.2
-and TWG >= 1.2.6, then run setup, doctor, peek, toggle, and refresh with an
-allowed issue key. Confirm read-only behavior and remove test state.
+For future smoke tests, use an independent Jira site and permitted test
+account. Verify Herdr >= 0.8.2 and TWG >= 1.2.6, then run setup, doctor, peek,
+toggle, and refresh with an allowed issue key. Confirm read-only behavior and
+remove test state.
 
 The future release install command must use a reviewed immutable `--ref`
 reference, for example `herdr plugin install <owner>/<repository> --ref
