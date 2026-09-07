@@ -13,9 +13,16 @@ unreleased until every applicable item is verified.
 - [x] Scan the final tree for secrets, credentials, Jira URLs, issue content,
   private tenant details, and generated data. The 2026-09-07 manual review
   covered source, scripts, docs, and images; no confirmed secrets or private
-  tenant data were found. This was not a gitleaks run.
-- [ ] Scan Git history for the same items before publication; the final-tree
-  scan does not replace a history scan.
+  tenant data were found. A subsequent Gitleaks 8.30.1 scan of the current files
+  also found no secrets.
+- [x] Scan Git history before publication. Gitleaks 8.30.1 scanned all branches,
+  tags, and reflogs through `0f14066` (four commits) with no secrets found.
+  Additional review of historical filenames and text found no committed private
+  configuration, state, personal filesystem paths, or real Jira tenant URLs.
+  Issue content was limited to test fixtures and fictional screenshot content;
+  all five historical screenshots match the reviewed images and have no extra
+  metadata. The maintainer name and approved contact email appear in commit
+  metadata. Recheck any later changes before publication.
 - [x] Document the maintainer-selected private vulnerability reporting contact
   in `SECURITY.md`: [hilmimukti@gmail.com](mailto:hilmimukti@gmail.com).
 - [x] Document the Code of Conduct reporting contact in `CODE_OF_CONDUCT.md`.
