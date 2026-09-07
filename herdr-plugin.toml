@@ -1,0 +1,44 @@
+id = "hlmmkttm.jira-peek"
+name = "Peek for Jira"
+version = "0.1.0"
+min_herdr_version = "0.8.2"
+description = "Read-only Jira Cloud previews from the current Herdr pane"
+platforms = ["macos", "linux"]
+
+# Scan the focused pane for Jira keys and review the chosen one in an adjacent pane.
+[[actions]]
+id = "peek"
+title = "Peek for Jira issue from pane"
+contexts = ["workspace"]
+command = ["sh", "scripts/peek.sh"]
+
+# Escape hatch: open the last-seen key in the browser.
+[[actions]]
+id = "open-browser"
+title = "Open last Jira issue in browser"
+contexts = ["workspace"]
+command = ["sh", "scripts/open-browser.sh"]
+
+[[actions]]
+id = "setup"
+title = "Set up Peek for Jira"
+contexts = ["workspace"]
+command = ["sh", "scripts/setup.sh"]
+
+[[actions]]
+id = "doctor"
+title = "Check Peek for Jira"
+contexts = ["workspace"]
+command = ["sh", "scripts/doctor.sh"]
+
+[[actions]]
+id = "clear-cache"
+title = "Clear Peek for Jira cache"
+contexts = ["workspace"]
+command = ["sh", "scripts/clear-cache.sh"]
+
+[[panes]]
+id = "viewer"
+title = "Peek for Jira"
+placement = "split"
+command = ["sh", "scripts/viewer.sh"]

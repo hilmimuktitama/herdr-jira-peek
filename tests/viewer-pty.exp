@@ -1,0 +1,378 @@
+#!/usr/bin/expect -f
+
+if {$argc != 4} { puts stderr "usage: viewer-pty.exp ROOT TMP REAL_FZF REAL_LESS"; exit 2 }
+set root [lindex $argv 0]
+set tmp [lindex $argv 1]
+set real_fzf [lindex $argv 2]
+set real_less [lindex $argv 3]
+set state [file join $tmp "pty-state-abcdefghijklmnopqrstuvwxyz-abcdefghijklmnopqrstuvwxyz-abcdefghijklmnopqrstuvwxyz-abcdefghijklmnop"]
+set config [file join $tmp pty-config]
+set bin [file join $tmp pty-bin]
+set counts [file join $tmp pty-counts]
+set source [file join $tmp pty-source]
+set action_failure [file join $tmp action-failure]
+file mkdir $state $config $bin $counts $source
+exec chmod 700 $state $config $bin $counts
+foreach utility {open pbcopy xdg-open wl-copy xclip xsel} {
+  set u [open [file join $bin $utility] w]
+  puts $u {#!/bin/sh
+cat >/dev/null
+[ -e "$PTY_ACTION_FAILURE" ] && exit 1
+exit 0}
+  close $u
+  exec chmod 700 [file join $bin $utility]
+}
+if {[string length [file normalize $state]] <= 104} { puts stderr "long state path is not long enough"; exit 1 }
+
+set f [open [file join $config config.sh] w]
+puts $f {JIRA_BASE="https://jira.example.test"}
+puts $f {JIRA_SITE="jira-example"}
+puts $f {JIRA_PROJECTS="ABC"}
+puts $f {CACHE_TTL_MIN=10}
+puts $f {MAX_CANDIDATES=20}
+close $f
+set f [open [file join $source visible] w]; puts $f "ABC-1 DEF-2 ABC-3"; close $f
+set f [open [file join $source recent-unwrapped] w]; puts $f "ABC-1"; close $f
+set f [open [file join $state candidates] w]
+for {set i 1} {$i <= 11} {incr i} { puts $f "ABC-$i" }
+close $f
+
+file link -symbolic [file join $bin fzf] $real_fzf
+file link -symbolic [file join $bin less] $real_less
+set h [open [file join $bin herdr] w]
+puts $h {#!/bin/sh
+printf "%s\n" "$*" >> "$PTY_HERDR_LOG"
+if [ "$1" = pane ] && [ "$2" = get ]; then printf '%s\n' '{"result":{"pane":{"pane_id":"source-pane","terminal_id":"source-terminal"}}}'; exit 0; fi
+if [ "$1" = pane ] && [ "$2" = read ]; then cat "$PTY_SOURCE/${5:-visible}"; exit 0; fi
+exit 1}
+close $h
+exec chmod 700 [file join $bin herdr]
+set t [open [file join $bin twg] w]
+puts $t {#!/bin/sh
+printf "%s\n" "$*" >> "$PTY_METADATA_LOG"
+case " $* " in
+  *" --comments "*) : ;;
+  *" --fields "*)
+  if ! mkdir "$PTY_COUNTS/.metadata-lock" 2>/dev/null; then : > "$PTY_METADATA_OVERLAP"; printf '%s\n' 'overlapping metadata batch' >&2; exit 97; fi
+  trap 'rmdir "$PTY_COUNTS/.metadata-lock"' 0 1 2 15
+  if [ -n "${PTY_METADATA_GATE:-}" ] && [ ! -f "$PTY_METADATA_RELEASE" ]; then
+    : > "$PTY_METADATA_STARTED"
+    while [ ! -f "$PTY_METADATA_RELEASE" ]; do sleep 0.05; done
+  fi
+  jq -n '{data:{items:[range(1;17) | {input:("ABC-"+tostring),ok:true,data:{key:("ABC-"+tostring),summary:("PTY issue "+tostring),status:{name:"Done"}}}]}}'
+  exit 0
+  ;;
+esac
+key=
+for arg in "$@"; do
+  case "$arg" in ABC-[0-9]*) key=$arg;; esac
+done
+[ -n "$key" ] || key=ABC-1
+count_file="$PTY_COUNTS/$key"
+count=0
+[ -f "$count_file" ] && count=$(cat "$count_file")
+count=$((count + 1))
+printf "%s\n" "$count" > "$count_file"
+body="PTY body $key version $count"
+i=1
+while [ "$i" -le 60 ]; do body="$body
+Preview line $i"; i=$((i + 1)); done
+jq -n --arg key "$key" --arg body "$body" '{key:$key,summary:$key,description:$body,status:{name:"Done"}}'
+}
+close $t
+exec chmod 700 [file join $bin twg]
+
+set env(PATH) "$bin:$env(PATH)"
+set env(HERDR_SOCKET_PATH) ""
+set env(TWG_BIN_PATH) [file join $bin twg]
+set env(HERDR_PLUGIN_CONFIG_DIR) $config
+set env(HERDR_PLUGIN_STATE_DIR) $state
+set env(PTY_COUNTS) $counts
+set env(PTY_SOURCE) $source
+set env(PTY_HERDR_LOG) [file join $tmp herdr.log]
+set env(HERDR_BIN_PATH) [file join $bin herdr]
+set env(HERDR_VIEWER_SOURCE_PANE) source-pane
+set env(HERDR_VIEWER_SOURCE_TERMINAL) source-terminal
+set env(HERDR_VIEWER_CANDIDATES) [join {ABC-1 ABC-2 ABC-3 ABC-4 ABC-5 ABC-6 ABC-7 ABC-8 ABC-9 ABC-10 ABC-11} "\n"]
+set env(PTY_METADATA_OVERLAP) [file join $tmp metadata-overlap]
+set env(PTY_METADATA_LOG) [file join $tmp metadata.log]
+set env(PTY_ACTION_FAILURE) $action_failure
+set env(TERM) xterm-256color
+set env(COLUMNS) 100
+set env(LINES) 40
+set env(NO_COLOR) 1
+set timeout 15
+match_max 20000
+log_user 0
+set observed_output {}
+log_file -a [file join $tmp pty-transcript]
+set stty_init {rows 40 columns 100}
+
+proc stop_child {} {
+  global spawn_id
+  catch {exec kill -TERM [exp_pid -i $spawn_id]}
+  catch {close -i $spawn_id}
+  catch {wait -i $spawn_id}
+}
+proc slurp {path} {
+  set channel [open $path r]
+  set contents [read $channel]
+  close $channel
+  return $contents
+}
+proc observe {value} {
+  global observed_output
+  append observed_output $value
+  if {[string length $observed_output] > 200000} { set observed_output [string range $observed_output end-199999 end] }
+}
+proc send_key {key} {
+  global observed_output spawn_id
+  set observed_output {}
+  send -i $spawn_id -- $key
+}
+proc await_help_state {desired phase} {
+  global state spawn_id
+  set timeout 0
+  set last_output_ms [clock milliseconds]
+  for {set i 0} {$i < 100} {incr i} {
+    expect {
+      -re {(?s).*?\033\[6n} { observe $expect_out(buffer); set last_output_ms [clock milliseconds]; send -i $spawn_id "\033\[1;1R"; exp_continue }
+      -re {(?s).+} { observe $expect_out(buffer); set last_output_ms [clock milliseconds]; exp_continue }
+      eof { puts stderr "PTY EOF: $phase while polling help state"; stop_child; exit 1 }
+      timeout {}
+    }
+    set dirs [glob -nocomplain -directory $state .viewer.*]
+    if {$dirs ne ""} {
+      set path [file join [lindex $dirs 0] ui-help]
+      set present [file exists $path]
+      if {$present == $desired && [clock milliseconds] - $last_output_ms >= 100} { return }
+    }
+    after 20
+  }
+  puts stderr "PTY timeout: $phase help state desired=$desired"
+  stop_child
+  exit 1
+}
+proc await {phase pattern} {
+  global spawn_id state tmp observed_output
+  if {[regexp $pattern $observed_output]} { return }
+  expect {
+    -re $pattern { observe $expect_out(buffer); return }
+      -re "\033\\\[6n" { observe $expect_out(buffer); send -i $spawn_id "\033\[1;1R"; exp_continue }
+    timeout {
+      catch {
+        set dirs [glob -nocomplain -directory $state .viewer.*]
+        set diag_state $state
+        if {$dirs ne ""} { set diag_state [lindex $dirs 0] }
+        set out [open [file join $tmp pty-failure-candidates] w]
+        if {[file exists [file join $diag_state candidates]]} { puts -nonewline $out [slurp [file join $diag_state candidates]] }
+        close $out
+        set out [open [file join $tmp pty-failure-status] w]
+        if {[file exists [file join $diag_state status]]} { puts -nonewline $out [slurp [file join $diag_state status]] }
+        close $out
+       if {$dirs ne ""} {
+         set err [file join $diag_state fzf-stderr]
+         if {[file exists $err]} { file copy -force $err [file join $tmp pty-failure-stderr] }
+       }
+        set preview_lines [regexp -all -inline {Preview line [0-9]+} [expr {[info exists expect_out(buffer)] ? $expect_out(buffer) : ""}]]
+        set preview_positions [regexp -all -inline {[0-9]+/66} [expr {[info exists expect_out(buffer)] ? $expect_out(buffer) : ""}]]
+        set rows [glob -nocomplain -directory [file join $diag_state rows] *]
+        set layout [expr {[file exists [file join $diag_state ui-layout]] ? [slurp [file join $diag_state ui-layout]] : "(missing)"}]
+        puts stderr "PTY diagnostic detail $phase: preview_lines=$preview_lines preview_positions=$preview_positions rows=[llength $rows] pending_snapshot=[file exists [file join $diag_state pending-snapshot]] ui_layout=$layout"
+      }
+      set viewer_present 0
+      if {[info exists dirs] && $dirs ne ""} { set viewer_present 1 }
+      puts stderr "PTY diagnostic $phase: viewer=$viewer_present candidates=[file exists [file join $diag_state candidates]] status=[file exists [file join $diag_state status]] herdr_log=[file exists [file join $tmp herdr.log]]"
+      set output [expr {[info exists expect_out(buffer)] ? $expect_out(buffer) : "(no terminal output)"}]
+      set sample [string map [list "\033" "<ESC>" "\r" "<CR>" "\n" "<LF>"] $output]
+      set start [expr {[string length $sample] > 240 ? [string length $sample] - 240 : 0}]
+      puts stderr "PTY timeout: $phase [string range $sample $start end]"
+      stop_child; exit 1
+    }
+    eof {
+      set output [expr {[info exists expect_out(buffer)] ? $expect_out(buffer) : "(no terminal output)"}]
+      set sample [string map [list "\033" "<ESC>" "\r" "<CR>" "\n" "<LF>"] $output]
+      set start [expr {[string length $sample] > 240 ? [string length $sample] - 240 : 0}]
+      puts stderr "PTY EOF: $phase [string range $sample $start end]"
+      stop_child; exit 1
+    }
+  }
+}
+proc await_initial_preview {} {
+  global spawn_id observed_output
+  set body_seen [regexp {PTY body ABC-1 version 1} $observed_output]
+  set full_preview_seen [regexp {1/66} $observed_output]
+  if {$body_seen && $full_preview_seen} { return }
+  expect {
+    -re "PTY body ABC-1 version 1" { observe $expect_out(buffer); set body_seen 1; if {$full_preview_seen} { return }; exp_continue }
+    -re {1/66} { observe $expect_out(buffer); set full_preview_seen 1; if {$body_seen} { return }; exp_continue }
+    -re "\033\\\[6n" { observe $expect_out(buffer); send -i $spawn_id "\033\[1;1R"; exp_continue }
+    eof { puts stderr "PTY EOF: initial preview"; stop_child; exit 1 }
+    timeout { puts stderr "PTY timeout: initial preview"; stop_child; exit 1 }
+  }
+}
+proc settle_output {phase} {
+  global spawn_id state counts
+  set timeout 0
+  set last_activity [clock milliseconds]
+  set deadline [expr {[clock milliseconds] + 5000}]
+  while {[clock milliseconds] < $deadline} {
+    expect {
+      -re {(?s).*?\033\[6n} { observe $expect_out(buffer); send -i $spawn_id "\033\[1;1R"; set last_activity [clock milliseconds] }
+      -re {(?s).+} { observe $expect_out(buffer); set last_activity [clock milliseconds] }
+      eof { puts stderr "PTY EOF: $phase while settling"; stop_child; exit 1 }
+      timeout {}
+    }
+    set viewer_dirs [glob -nocomplain -directory $state .viewer.*]
+    set pending_refresh {}
+    if {$viewer_dirs ne ""} {
+      set pending_refresh [glob -nocomplain -directory [file join [lindex $viewer_dirs 0] pending-refresh] *]
+      foreach request [glob -nocomplain -directory [lindex $viewer_dirs 0] .request.*] { lappend pending_refresh $request }
+    }
+    set metadata_idle 1
+    if {[file exists [file join $counts .metadata-lock]]} { set metadata_idle 0 }
+    if {$viewer_dirs ne "" && [file exists [file join [lindex $viewer_dirs 0] pending-snapshot]]} { set metadata_idle 0 }
+    if {[clock milliseconds] - $last_activity >= 250 && $metadata_idle && $pending_refresh eq ""} { return }
+    after 20
+  }
+  puts stderr "PTY timeout: $phase output did not settle"; stop_child; exit 1
+}
+
+spawn -noecho sh "$root/scripts/viewer.sh"
+await header {Filter >}
+await_initial_preview
+settle_output before-preview-page-down
+send_key "\033\[6~"
+await preview-page-down {Preview line 40}
+settle_output before-preview-page-up
+send_key "\033\[5~"
+await preview-page-up {PTY body ABC-1 version 1}
+send_key "\033OP"
+await help-open {PgUp/PgDn or Ctrl-D/U scroll}
+await_help_state 1 initial-help-open
+send_key "\033OP"
+await help-closed {PTY body ABC-1 version 1}
+set viewer_dir [lindex [glob -nocomplain -directory $state .viewer.*] 0]
+await_help_state 0 initial-help-closed
+set observed_output {}
+exec stty rows 20 columns 170 < $spawn_out(slave,name)
+after 300
+exec stty rows 10 columns 55 < $spawn_out(slave,name)
+after 300
+exec stty rows 40 columns 100 < $spawn_out(slave,name)
+after 300
+await resize-restored {PTY body ABC-1 version 1}
+settle_output before-filter
+send_key "'ABC-11"
+await filtered-preview {PTY body ABC-11 version 1}
+send_key "\031"
+await copied-key {Copied key}
+send_key "\014"
+await copied-link {Copied link}
+send_key "\017"
+await opened-browser {Opened browser}
+set f [open $action_failure w]; close $f
+send_key "\031"
+await copy-key-failure {Could not copy key}
+send_key "\014"
+await copy-link-failure {Could not copy link}
+send_key "\017"
+await browser-failure {Could not open browser}
+file delete -force $action_failure
+send_key "\033OP"
+await active-help {PgUp/PgDn or Ctrl-D/U scroll preview}
+set viewer_dir [lindex [glob -nocomplain -directory $state .viewer.*] 0]
+await_help_state 1 filtered-help-open
+send_key "\033OP"
+await active-help-closed {PTY body ABC-11 version 1}
+await_help_state 0 filtered-help-closed
+set f [open [file join $source visible] w]; puts $f "ABC-12 ABC-11 ABC-13"; close $f
+set f [open [file join $source recent-unwrapped] w]; puts $f ""; close $f
+send_key "\r"
+await reader {Issue details}
+await reader-help {q back · ↑↓ scroll · Space/b page}
+send_key "q"
+await returned-list {Filter >}
+send_key "\007"
+await rescanned-count {Rescanned: 3 issues}
+await rescanned-selection {PTY body ABC-11 version 1}
+await_help_state 0 post-rescan-settled
+settle_output before-post-rescan-refresh
+send_key "\022"
+await refreshed-preview {PTY body ABC-11 version 2}
+set viewer_dirs [glob -nocomplain -directory $state .viewer.*]
+if {$viewer_dirs ne ""} {
+  set stderr_file [file join [lindex $viewer_dirs 0] fzf-stderr]
+  if {[file exists $stderr_file] && [file size $stderr_file] != 0} { puts stderr "fzf stderr retained issue content"; stop_child; exit 1 }
+}
+settle_output before-viewer-close
+send_key "\033"
+expect {
+  -re "\033\\\[6n" { send -i $spawn_id "\033\[1;1R"; exp_continue }
+  eof {}
+  timeout { puts stderr "PTY timeout: viewer close"; stop_child; exit 1 }
+}
+set status [wait -i $spawn_id]
+if {[lindex $status 3] != 0} { puts stderr "viewer exited nonzero: $status"; exit 1 }
+if {[glob -nocomplain -directory $state .viewer.*] ne ""} { puts stderr "viewer temporary directories remain"; exit 1 }
+set f [open [file join $state candidates] w]; puts $f "ABC-1"; close $f
+set gate [file join $tmp metadata-gate]; set release [file join $tmp metadata-release]; set started [file join $tmp metadata-started]
+file delete -force $release $started
+set env(PTY_METADATA_GATE) $gate
+set env(PTY_METADATA_RELEASE) $release
+set env(PTY_METADATA_STARTED) $started
+set env(HERDR_VIEWER_CANDIDATES) "ABC-1"
+set mf [open $env(PTY_METADATA_LOG) w]; close $mf
+set f [open [file join $source visible] w]; puts $f "ABC-1"; close $f
+set f [open [file join $source recent-unwrapped] w]; puts $f ""; close $f
+spawn -noecho sh "$root/scripts/viewer.sh"
+await gated-header {Filter >}
+set waited 0
+while {![file exists $started] && $waited < 100} { after 50; incr waited }
+if {![file exists $started]} { puts stderr "metadata gate did not engage"; stop_child; exit 1 }
+send_key "\022"
+set f [open [file join $source visible] w]; puts $f "ABC-12 ABC-13"; close $f
+send_key "\007"
+await queued-rescan {Rescanned: 2 issues}
+set f [open [file join $source visible] w]; puts $f "ABC-14 ABC-15 ABC-16"; close $f
+send_key "\007"
+await latest-rescan {Rescanned: 3 issues}
+set observed_output {}
+set f [open $release w]; close $f
+await released-latest {PTY body ABC-16 version 1}
+settle_output before-latest-filter
+send_key "'ABC-14"
+await selected-latest {PTY body ABC-14 version 1}
+await_help_state 0 selected-latest-settled
+settle_output before-gated-refresh-close
+send_key "\022"
+await gated-refresh {PTY body ABC-14 version 2}
+settle_output before-gated-viewer-close
+send_key "\033"
+expect {
+  -re "\033\\\[6n" { send -i $spawn_id "\033\[1;1R"; exp_continue }
+  eof {}
+  timeout { puts stderr "PTY timeout: gated viewer close"; stop_child; exit 1 }
+}
+set gated_status [wait -i $spawn_id]
+if {[lindex $gated_status 3] != 0} { puts stderr "gated viewer exited nonzero: $gated_status"; exit 1 }
+if {[glob -nocomplain -directory $state .viewer.*] ne ""} { puts stderr "gated viewer temporary directories remain"; exit 1 }
+if {[file exists [file join $counts .metadata-lock]]} { puts stderr "metadata lock remains"; exit 1 }
+if {[file exists [file join $tmp metadata-overlap]]} { puts stderr "metadata batches overlapped"; exit 1 }
+set log_data [slurp [file join $tmp herdr.log]]
+if {[string match "*plugin pane open*" $log_data] || [string match "*plugin pane close*" $log_data]} { puts stderr "rescan changed layout"; exit 1 }
+set metadata_data [slurp $env(PTY_METADATA_LOG)]
+set metadata_fields {}
+foreach line [split $metadata_data "\n"] {
+  set words [split [string trim $line]]
+  if {[lsearch -exact $words --fields] >= 0} { lappend metadata_fields $words }
+}
+set requested_keys {}
+foreach words $metadata_fields { foreach word $words { if {[regexp {^(ABC-[0-9]+)$} $word -> key]} { lappend requested_keys $key } } }
+foreach key {ABC-1 ABC-14 ABC-15 ABC-16} { if {[lsearch -exact $requested_keys $key] < 0} { puts stderr "expected metadata request missing: $key"; exit 1 } }
+foreach key {ABC-12 ABC-13} { if {[lsearch -exact $requested_keys $key] >= 0} { puts stderr "intermediate metadata snapshot was fetched: $key"; exit 1 } }
+set abc1_count 0
+foreach words $metadata_fields { if {[lsearch -exact $words ABC-1] >= 0} { incr abc1_count } }
+if {$abc1_count < 2} { puts stderr "queued ABC-1 refresh was lost"; exit 1 }
+if {![string match "*pane read source-pane*" $log_data]} { puts stderr "rescan did not read source pane"; exit 1 }
+puts "ok - real PTY rescan/filter/reader/refresh/coalescing/close"

@@ -1,0 +1,54 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  shell:
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - macos-latest
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends --yes expect jq less shellcheck
+          curl -fsSL --retry 3 \
+            https://github.com/junegunn/fzf/releases/download/v0.74.3/fzf-0.74.3-linux_amd64.tar.gz \
+            -o /tmp/fzf.tar.gz
+          printf '%s  %s\n' \
+            3501a595e4b5c40a6b047340a0e8f805c46fd4e61ef95ef8a136ba8c61cf6f22 \
+            /tmp/fzf.tar.gz | sha256sum --check --status
+          tar -xzf /tmp/fzf.tar.gz -C /tmp
+          sudo install /tmp/fzf /usr/local/bin/fzf
+
+      - name: Install macOS dependencies
+        if: runner.os == 'macOS'
+        run: brew install expect fzf jq less shellcheck
+
+      - name: Check shell syntax
+        run: |
+          for file in config.example.sh scripts/*.sh tests/*.sh; do
+            sh -n "$file" || exit
+          done
+
+      - name: Validate Herdr manifest
+        run: sh tests/manifest.sh
+
+      - name: Run tests
+        run: sh tests/run.sh
+
+      - name: Run shellcheck
+        run: shellcheck -s sh -e SC1090 config.example.sh scripts/*.sh tests/*.sh

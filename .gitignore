@@ -1,0 +1,23 @@
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Editors
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Local configuration and environment files
+config.sh
+.env
+.env.*
+!.env.example
+*.local
+
+# Local Herdr state and generated output
+cache/
+herdr-plugin-state/
+*.log
