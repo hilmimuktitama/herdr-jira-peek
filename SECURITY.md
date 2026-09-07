@@ -18,31 +18,63 @@ credentials, tokens, and other sensitive data from the report.
 
 ## Jira data and local cache
 
-The picker requests capped metadata in one batch and keeps it only in its
-private viewer directory. Full descriptions and comments are fetched lazily
-for a preview and cached in Herdr's private plugin state for the configured
-TTL. Expired entries are deleted on invocation; `CACHE_TTL_MIN=0` uses a
-temporary render file and leaves no durable issue cache entry. A refresh
-removes the selected entry before fetching a replacement. Protect the plugin
-state directory and do not share cache files in bug reports. The plugin only
-reads Jira data and never mutates Jira work items.
+The plugin only reads Jira data. Its project allowlist limits the issue keys
+sent to TWG; it does not restrict TWG's OAuth permissions or redact the local
+terminal capture used to find keys. TWG authentication and organization
+permissions are managed separately; see [third-party notices](THIRD_PARTY_NOTICES.md).
 
-Raw TWG responses and stderr can exist transiently in private request state
-while a request is running; they are not intended as durable plugin data or
-displayed diagnostic text. Fetch and viewer temporaries include their owner
-process ID. Normal exits and
-handled signals remove them immediately; a later invocation removes abandoned
-entries after confirming that the recorded process is no longer running.
+| Data | Storage and retention |
+| --- | --- |
+| Source pane output | Written to private scan files before extracting keys. May contain unrelated terminal content. Removed on normal scan exit or handled signals. |
+| Picker metadata | A capped batch of summaries, statuses, assignees, and update times is requested. Viewer files are removed on normal viewer exit. |
+| Full issue JSON | Fetched lazily for a selected preview or reader. With a positive TTL, stored in the issue cache; expired files are purged at runtime startup. With `CACHE_TTL_MIN=0`, a temporary render file is used instead. |
+| Selection and bookkeeping | The last selected key, initial candidate list, pane tracking, cache-generation filenames, and diagnostic filenames can persist outside the issue cache. Some contain issue keys. |
 
-Diagnostics use fixed local labels and do not display arbitrary TWG text. Older
-persisted diagnostic artifacts are purged during startup; this does not make raw
-request response or stderr bytes a permanent-storage guarantee.
+A refresh removes the selected cached issue before fetching a replacement.
+`clear-cache` removes only regular files directly inside the issue-cache
+directory. Neither it nor `CACHE_TTL_MIN=0` removes selection or bookkeeping
+state, active viewer files, or every abandoned temporary file.
 
-The `doctor` action is read-only and never runs login/setup or prints TWG
-output. The `clear-cache` action removes only regular files directly inside
-Peek for Jira's issue-cache directory; it does not recurse through unrelated
-state.
+## Temporary data and interrupted processes
 
-`config.sh` is parsed as a small allowlist of setting assignments and is never
-executed as shell code. Config, state, cache, and diagnostic paths are rejected
-when their final path component is a symlink.
+Raw TWG responses and stderr are captured in private local files while a
+request runs. The scanner similarly captures the source pane's full output
+locally, but sends only validated issue keys to TWG. Normal exits and handled
+signals clean these temporary files.
+
+Forced termination, such as SIGKILL or a system crash, can bypass cleanup.
+Later runtime startup reaps recognized PID-stamped TWG fetch files once their
+owner is gone, and abandoned viewer directories in the current Herdr session.
+It does not reap every temporary file type or every other session's viewer
+directory. In particular, `.scan.*` and `.scan-all.*` directories can remain
+with pane text or extracted keys. The doctor's temporary
+`peek-for-jira-doctor.*` output file in the system temporary directory also
+has no startup reaper. Cache TTL is not a retention limit for these files.
+
+Persisted fetch diagnostics use fixed labels rather than arbitrary TWG text;
+obsolete diagnostic contents are purged at runtime startup. Diagnostic
+filenames can still identify issues. The `doctor` action never runs login/setup
+or prints captured TWG output.
+
+## Local data cleanup
+
+Protect the plugin's config and state directories and do not attach their
+contents, raw terminal captures, or temporary request files to bug reports.
+Use the state directory Herdr supplies to plugin processes as
+`HERDR_PLUGIN_STATE_DIR`, rather than guessing a path. For a full local reset,
+close all Peek viewers and let plugin actions finish across Herdr
+sessions, then remove only this plugin's identified state directory. This also
+removes the last selection and tracking information. Inspect the system
+temporary directory separately for abandoned `peek-for-jira-doctor.*` files
+owned by you. Do not remove files belonging to an active process.
+
+Config and state may share a directory in custom setups; preserve `config.sh`
+if you intend to keep your settings. Plugin uninstallation should not be
+treated as proof that all local data has been erased. Herdr's own terminal
+history, TWG-managed files, backups, and clipboard contents are outside this
+plugin's cache cleanup.
+
+`config.sh` is parsed as an allowlist of setting assignments and is never
+executed as shell code. The config file and main config, state, cache, and
+diagnostic directories are rejected when their final path component is a
+symlink.

@@ -21,7 +21,7 @@ CACHE_TTL_MIN=10
 MAX_CANDIDATES=20
 KEY_RE=
 
-# Config is a deliberately small declarative assignment file. Parse the five
+# Config is a deliberately small declarative assignment file. Parse the six
 # public settings as data instead of executing config.sh as shell code.
 decode_config_value() {
   config_raw=$(printf '%s\n' "${1:-}" \

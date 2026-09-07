@@ -1,93 +1,82 @@
-# First-release checklist
+# Release checklist
 
-This checklist prepares a release; it does not publish one. Keep `0.1.0`
-unreleased until every applicable item is verified.
+Canonical repository: [hilmimuktitama/herdr-jira-peek](https://github.com/hilmimuktitama/herdr-jira-peek).
+Plugin ID: `hlmmkttm.jira-peek`.
 
-## Preparation
+`0.1.0` is unreleased, with no tags or releases. Making the source public and publishing a versioned release
+are separate steps. This project has no publish automation.
 
-- [x] Confirm the maintainer has authority to publish this repository and that
-  employer, contributor, and third-party permissions allow publication.
-- [x] Confirm the canonical repository:
-  [hilmimuktitama/herdr-jira-peek](https://github.com/hilmimuktitama/herdr-jira-peek).
-  The Herdr plugin identifier remains `hlmmkttm.jira-peek`.
-- [x] Scan the final tree for secrets, credentials, Jira URLs, issue content,
-  private tenant details, and generated data. The 2026-09-07 manual review
-  covered source, scripts, docs, and images; no confirmed secrets or private
-  tenant data were found. A subsequent Gitleaks 8.30.1 scan of the current files
-  also found no secrets.
-- [x] Scan Git history before publication. Gitleaks 8.30.1 scanned all branches,
-  tags, and reflogs through `0f14066` (four commits) with no secrets found.
-  Additional review of historical filenames and text found no committed private
-  configuration, state, personal filesystem paths, or real Jira tenant URLs.
-  Issue content was limited to test fixtures and fictional screenshot content;
-  all five historical screenshots match the reviewed images and have no extra
-  metadata. The maintainer name and approved contact email appear in commit
-  metadata. Recheck any later changes before publication.
-- [x] Document the maintainer-selected private vulnerability reporting contact
-  in `SECURITY.md`: [hilmimukti@gmail.com](mailto:hilmimukti@gmail.com).
-- [x] Document the Code of Conduct reporting contact in `CODE_OF_CONDUCT.md`.
-  The maintainer selected the same address for both policies, with distinct
-  suggested email subjects for security and conduct reports.
-- [ ] Confirm the availability, licensing, terms, privacy, and permission
-  requirements of Herdr, TWG, and runtime dependencies (`jq`, `less`, `curl`,
-  browser/clipboard utilities, and optional `fzf`), and keep the existing
-  notices accurate.
-- [x] Run the existing local/CI checks from `CONTRIBUTING.md` and confirm CI is
-  green on its supported macOS and Linux jobs. Both passed for `552fd2a` in
-  [CI run 34079614103](https://github.com/hilmimuktitama/herdr-jira-peek/actions/runs/34079614103).
-  No public publication has occurred.
+## Before making the repository public
 
-### Local verification record — 2026-09-07
+- [x] Record maintainer confirmation of authority to publish, including
+  employer, contributor, and third-party permissions.
+- [x] Include the MIT license, contribution terms, security policy, and Code of
+  Conduct. Both reporting policies use the maintainer-selected private contact
+  [hilmimukti@gmail.com](mailto:hilmimukti@gmail.com).
+- [x] Document local pane capture, retained issue keys, cache behavior, and
+  interrupted-process cleanup limits in [SECURITY.md](SECURITY.md).
+- [x] Add upstream setup, permission, privacy, and terms references in
+  [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+- [ ] Confirm the applicable dependency terms and organizational permissions
+  for the intended distribution; links alone do not establish approval.
+- [ ] Confirm the reporting inbox receives private security and conduct reports;
+  delivery has not been independently tested.
+- [ ] Review the exact tree and Git history selected for publication for secrets,
+  private tenant details, issue content, and generated state. Dated evidence
+  below covers only the revisions and files described there.
+- [x] Set the GitHub description and the `herdr-plugin`, `jira`, and `terminal`
+  topics; verified on 2026-09-07 while the repository remained private.
+- [ ] Make the repository public, remove the private-access note from README,
+  and verify the documented install path is publicly accessible.
+- [ ] Confirm marketplace discovery after publication. Herdr indexes public
+  repositories with the `herdr-plugin` topic and a valid manifest on the default
+  branch; listing is automatic and is not an endorsement. See the
+  [marketplace documentation](https://herdr.dev/docs/marketplace/).
 
-- [x] Full runtime suite, including final privacy/PAGER, cross-session, and real
-  PTY coverage, plus the static manifest and shell syntax checks, passed before
-  the final documentation-only change.
-- [x] Original owned shellcheck 0.11.0 run passed for
-  `config.example.sh scripts/*.sh tests/*.sh`.
-- [x] Full CI verification passed on macOS and Linux for `552fd2a`.
-- [ ] Investigate the intermittent macOS PTY paging timeout. The run for
-  `bce0234` passed on retry, and five local PTY runs passed; the cause remains
-  unresolved. See [CI run 34080079774](https://github.com/hilmimuktitama/herdr-jira-peek/actions/runs/34080079774).
+## Before publishing a versioned release
 
-The original checks were:
+- [ ] Select the release commit and version, update the manifest and changelog,
+  and review the final release notes.
+- [ ] Confirm checks for the selected release commit using
+  [CONTRIBUTING.md](CONTRIBUTING.md#checks). Keep any known limitations explicit.
+- [ ] Resolve or explicitly document the intermittent macOS PTY paging timeout
+  described in the historical record below.
+- [ ] Publish the tag and release from the canonical repository, then update
+  README's release status and installation command to use the full reviewed
+  commit SHA with `--ref`. Keep the human-readable version/tag in the release
+  notes; a full commit SHA identifies the immutable source revision.
 
-```sh
-for file in config.example.sh scripts/*.sh tests/*.sh; do
-  sh -n "$file" || exit
-done
-sh tests/manifest.sh
-sh tests/run.sh
-```
-- [x] Record maintainer-reported manual validation: on 2026-09-07, the maintainer
-  confirmed the installed plugin was tested and works. Individual actions were
-  not independently observed; no site details, issue data, or private
-  configuration were collected for this record.
-- [x] Include [public screenshots](README.md#quick-tour) using entirely
-  fictional Jira content and a reserved test hostname. Do not publish real
-  issue keys, URLs, descriptions, comments, tokens, or tenant details.
+## Review evidence — 2026-09-07
 
-## Real smoke checklist
+- Latest existing CI: both `shell (ubuntu-latest)` and `shell (macos-latest)`
+  passed for `829e3c01c2a5d8c85c66212e262f9bca2c6b5d34` in
+  [run 34082990613](https://github.com/hilmimuktitama/herdr-jira-peek/actions/runs/34082990613).
+  This is evidence for that commit, not for later edits.
+- Gitleaks 8.30.1 found no leaks in the working files or Git history through
+  `829e3c0` (six commits, using `--all --reflog`). Manual review of historical
+  filenames and URL hosts found no confirmed private configuration or real
+  Jira tenant URLs. Scanner results are supporting evidence, not a guarantee.
+- All five screenshots were visually reviewed: they use fictional issue data
+  and example identities. The reader uses `jira.example.test`. PNG inspection
+  found only image chunks, with no extra metadata or trailing data. Relative
+  Markdown file targets resolved.
+- Public-release documentation was reviewed against the source and official
+  dependency documentation. Functional testing was excluded from this review.
 
-For future smoke tests, use an independent Jira site and permitted test
-account. Verify Herdr >= 0.8.2 and TWG >= 1.2.6, then run setup, doctor, peek,
-toggle, and refresh with an allowed issue key. Confirm read-only behavior and
-remove test state.
+## Historical validation — 2026-09-07
 
-The future release install command must use a reviewed immutable `--ref`
-reference, for example `herdr plugin install <owner>/<repository> --ref
-<reviewed-commit>`; no such release reference exists yet.
+- The earlier preparation record reports passing local runtime, PTY, privacy,
+  cross-session, shell syntax, static manifest, and ShellCheck 0.11.0 checks.
+  Both CI platforms passed for `552fd2a` in
+  [run 34079614103](https://github.com/hilmimuktitama/herdr-jira-peek/actions/runs/34079614103).
+- The macOS PTY paging check intermittently timed out. The run for `bce0234`
+  passed on retry, and five local PTY runs passed; the cause remained unresolved.
+  See [run 34080079774](https://github.com/hilmimuktitama/herdr-jira-peek/actions/runs/34080079774).
+  Later successful runs do not establish that the cause was fixed.
+- The maintainer confirmed that the installed plugin was tested and works.
+  No private site details, issue data, or configuration were collected for that
+  record.
 
-## Publication
-
-- [ ] Decide and document the eventual release version, tag, and release notes;
-  update version/docs only when publishing. Do not claim an immutable tag
-  before it exists.
-- [ ] Publish only from the reviewed canonical repository after preparation is
-  complete; there is no publish automation in this project.
-- [ ] Confirm the selected email inbox receives private vulnerability and
-  conduct reports before publication. Email delivery has not been tested here.
-- [ ] After publication, verify the documented install path and add the
-  `herdr-plugin` topic to the repository if that is the chosen marketplace
-  discovery mechanism.
-
-No new runtime features are required for release preparation.
+Future live smoke checks should use an independent Jira site and permitted
+test account. Follow the documented requirements, exercise setup, doctor,
+peek, toggle, and refresh with an allowed key, and remove test state afterward.

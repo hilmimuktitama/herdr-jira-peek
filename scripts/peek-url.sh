@@ -1,6 +1,7 @@
 #!/bin/sh
 # shellcheck source=scripts/common.sh
-# Ctrl+click on a configured Jira browse URL lands here: review it in an adjacent pane.
+# Legacy URL entrypoint retained for explicit callers and regression coverage.
+# The public manifest registers no link handler; Ctrl+click does not invoke it.
 set -eu
 . "$(dirname "$0")/common.sh"
 lock_acquire

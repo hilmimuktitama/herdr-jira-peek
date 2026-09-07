@@ -10,10 +10,11 @@ distribute it under those same MIT terms.
 
 ## Prerequisites
 
-- Herdr >= 0.8.2
-- TWG >= 1.2.6, configured with Atlassian OAuth via `twg setup` for issue testing
+- [Herdr](https://herdr.dev/docs/install/) >= 0.8.2 for linking and manual use
+- [TWG](https://developer.atlassian.com/cloud/twg-cli/getting-started/installation/)
+  >= 1.2.6, configured with Atlassian OAuth for live Jira use
 - A POSIX shell, `jq`, and `less`
-- `fzf` for testing the interactive picker
+- `fzf` and `expect` for the interactive PTY coverage (with `less`)
 - ShellCheck 0.11.0 for the release lint gate (the version pinned in CI)
 
 ## Local development
@@ -28,8 +29,9 @@ Run the **Set up Peek for Jira** action from Herdr after linking. Setup copies
 from Herdr's `HERDR_PLUGIN_ROOT` and refuses to overwrite an existing config;
 it does not run TWG login/setup. Keep a test Jira account and a narrow
 `JIRA_PROJECTS` allowlist. Never commit credentials, private tenant details, or
-cached issue data. Tests fake external command dependencies and do not require
-a live setup.
+cached issue data. Automated tests fake Herdr and TWG, so they do not require
+either CLI, credentials, or a live Jira site. Some checks use real `fzf`,
+`less`, and `expect` binaries.
 
 ## Checks
 
@@ -42,6 +44,11 @@ done
 sh tests/run.sh
 sh tests/manifest.sh
 ```
+
+Install `fzf`, `less`, and `expect` for complete interactive coverage. The PTY
+checks are skipped when any of these is unavailable; the real-fzf option
+check is also skipped when fzf is absent. A successful run with skipped checks
+does not establish full coverage.
 
 Run the shell lint with ShellCheck 0.11.0. CI installs checksum-verified
 upstream binaries on both macOS and Linux to keep lint results consistent.
@@ -65,8 +72,9 @@ herdr plugin list --plugin hlmmkttm.jira-peek --json
 ```
 
 This changes local Herdr plugin registration and is a manual check, not part
-of the test suite. CI runs shell syntax checks, tests, and shellcheck only; it
-does not install Herdr or validate the manifest.
+of the test suite. CI runs shell syntax checks, static manifest contract checks
+(`tests/manifest.sh`), the runtime suite, and ShellCheck on macOS and Linux.
+It does not install Herdr or validate the manifest through Herdr itself.
 
 For an installed plugin, run **Check Peek for Jira** to verify config, state,
 dependencies, TWG version/authentication, and site access. Doctor never prints

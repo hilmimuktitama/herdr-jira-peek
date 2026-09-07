@@ -102,7 +102,8 @@ if ! command -v fzf >/dev/null 2>&1; then
   exit 0
 fi
 
-# Prepare an initial snapshot, then fetch each key in the background.
+# Prepare an initial snapshot, then load a capped metadata batch. Full issue
+# detail is fetched lazily when selected for preview or reading.
 if [ -n "${NO_COLOR:-}" ]; then
   printf '  loading %s issue(s) from Jira...\n' "$n"
 else

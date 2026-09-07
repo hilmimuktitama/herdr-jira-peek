@@ -3,8 +3,8 @@
 # The setup action copies this file from $HERDR_PLUGIN_ROOT; it never copies
 # from the caller's current working directory.
 # TWG owns Atlassian OAuth authentication; never put a token or credential here.
-# Keep this file declarative: one supported quoted NAME=value assignment per
-# line. It is parsed as data and is never executed as shell code.
+# Keep this file declarative: one supported NAME=value assignment per line.
+# Quote string values. It is parsed as data and never executed as shell code.
 
 # Jira Cloud browse origin, without a trailing slash. Required.
 JIRA_BASE='https://your-site.atlassian.net'
@@ -23,4 +23,5 @@ CACHE_TTL_MIN=10
 MAX_CANDIDATES=20
 
 # Optional: override the scan expression instead of deriving it from JIRA_PROJECTS.
+# Detected keys must still match JIRA_PROJECTS; this cannot expand the allowlist.
 # KEY_RE='(ABC|DEF)-[0-9]+'
