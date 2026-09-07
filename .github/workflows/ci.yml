@@ -24,7 +24,7 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install --no-install-recommends --yes expect jq less shellcheck
+          sudo apt-get install --no-install-recommends --yes expect jq less
           curl -fsSL --retry 3 \
             https://github.com/junegunn/fzf/releases/download/v0.74.3/fzf-0.74.3-linux_amd64.tar.gz \
             -o /tmp/fzf.tar.gz
@@ -36,7 +36,32 @@ jobs:
 
       - name: Install macOS dependencies
         if: runner.os == 'macOS'
-        run: brew install expect fzf jq less shellcheck
+        run: brew install expect fzf jq less
+
+      - name: Install ShellCheck 0.11.0
+        shell: bash
+        run: |
+          case "$RUNNER_OS-$RUNNER_ARCH" in
+            Linux-X64)
+              platform=linux.x86_64
+              checksum=b7af85e41cc99489dcc21d66c6d5f3685138f06d34651e6d34b42ec6d54fe6f6
+              ;;
+            macOS-ARM64)
+              platform=darwin.aarch64
+              checksum=339b930feb1ea764467013cc1f72d09cd6b869ebf1013296ba9055ab2ffbd26f
+              ;;
+            macOS-X64)
+              platform=darwin.x86_64
+              checksum=c2c15e08df0e8fbc374c335b230a7ee958c313fa5714817a59aa59f1aa594f51
+              ;;
+            *) printf 'Unsupported runner: %s-%s\n' "$RUNNER_OS" "$RUNNER_ARCH" >&2; exit 1 ;;
+          esac
+          curl -fsSL --retry 3 \
+            "https://github.com/koalaman/shellcheck/releases/download/v0.11.0/shellcheck-v0.11.0.$platform.tar.gz" \
+            -o "$RUNNER_TEMP/shellcheck.tar.gz"
+          printf '%s  %s\n' "$checksum" "$RUNNER_TEMP/shellcheck.tar.gz" | shasum -a 256 --check --status
+          tar -xzf "$RUNNER_TEMP/shellcheck.tar.gz" -C "$RUNNER_TEMP"
+          echo "$RUNNER_TEMP/shellcheck-v0.11.0" >> "$GITHUB_PATH"
 
       - name: Check shell syntax
         run: |
@@ -51,4 +76,7 @@ jobs:
         run: sh tests/run.sh
 
       - name: Run shellcheck
-        run: shellcheck -s sh -e SC1090 config.example.sh scripts/*.sh tests/*.sh
+        run: |
+          shellcheck --version
+          test "$(shellcheck --version | sed -n 's/^version: //p')" = 0.11.0
+          shellcheck -s sh -e SC1090 config.example.sh scripts/*.sh tests/*.sh

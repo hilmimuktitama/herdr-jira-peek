@@ -14,7 +14,7 @@ distribute it under those same MIT terms.
 - TWG >= 1.2.6, configured with Atlassian OAuth via `twg setup` for issue testing
 - A POSIX shell, `jq`, and `less`
 - `fzf` for testing the interactive picker
-- `shellcheck` for the release lint gate
+- ShellCheck 0.11.0 for the release lint gate (the version pinned in CI)
 
 ## Local development
 
@@ -43,7 +43,9 @@ sh tests/run.sh
 sh tests/manifest.sh
 ```
 
-Run the shell lint. `SC1090` is excluded because the entrypoint scripts source
+Run the shell lint with ShellCheck 0.11.0. CI installs checksum-verified
+upstream binaries on both macOS and Linux to keep lint results consistent.
+`SC1090` is excluded because the entrypoint scripts source
 their checked-in helper through a path resolved at runtime:
 
 ```sh
