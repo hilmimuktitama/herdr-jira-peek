@@ -4,6 +4,10 @@
 
 Initial release planned; no release tag has been published.
 
+- Use the neutral plugin ID `jira-peek`. Existing development installations
+  need to [migrate their registration, settings, and bindings](README.md#migrate-from-the-old-plugin-id).
+- Accept security reports through GitHub private vulnerability reporting,
+  with the maintainer's public email retained as an alternative.
 - Scan the current Herdr pane for Jira Cloud issue keys, with an explicit
   project allowlist and a capped, deduplicated candidate list.
 - Filter issues by key, status, or summary in an adjacent responsive picker.

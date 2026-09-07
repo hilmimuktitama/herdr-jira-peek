@@ -68,7 +68,7 @@ inspect the linked manifest:
 
 ```sh
 herdr plugin link "$PWD"
-herdr plugin list --plugin hlmmkttm.jira-peek --json
+herdr plugin list --plugin jira-peek --json
 ```
 
 This changes local Herdr plugin registration and is a manual check, not part

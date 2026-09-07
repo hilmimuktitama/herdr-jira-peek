@@ -7,10 +7,11 @@ the plugin by the official TWG CLI.
 
 ## Reporting a vulnerability
 
-Please report vulnerabilities privately to
-[hilmimukti@gmail.com](mailto:hilmimukti@gmail.com), with the subject
-"Peek for Jira security report". Do not disclose vulnerabilities in a public
-issue.
+Use [GitHub's private vulnerability reporting](https://github.com/hilmimuktitama/herdr-jira-peek/security/advisories/new)
+to send a security report to the maintainers. You can also email
+[hilmimukti@gmail.com](mailto:hilmimukti@gmail.com) with the subject
+"Peek for Jira security report". The maintainer has chosen to publish this
+contact address. Do not disclose vulnerabilities in a public issue.
 
 Include the affected version, a concise description of the impact, reproduction
 steps, and any suggested mitigation. Redact Jira URLs, issue content,

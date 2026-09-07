@@ -164,6 +164,9 @@ Maintainers should use the [release checklist](RELEASING.md).
 
 ## Update or remove
 
+If your installation uses the old `hlmmkttm.jira-peek` identifier, follow the
+[migration steps](#migrate-from-the-old-plugin-id) before updating.
+
 Close the Peek viewer before updating. For a GitHub-managed installation,
 rerun the install command above to replace the managed checkout with the
 current default branch. Keep personal settings in the separate config
@@ -173,12 +176,38 @@ that checkout directly instead.
 To unregister the plugin and remove its GitHub-managed checkout:
 
 ```sh
-herdr plugin uninstall hlmmkttm.jira-peek
+herdr plugin uninstall jira-peek
 ```
 
-For a locally linked checkout, use `herdr plugin unlink hlmmkttm.jira-peek`.
+For a locally linked checkout, use `herdr plugin unlink jira-peek`.
 These are [Herdr's plugin management commands](https://herdr.dev/docs/cli-reference/#plugins).
 For removal of retained plugin data, see [local data cleanup](SECURITY.md#local-data-cleanup).
+
+### Migrate from the old plugin ID
+
+The plugin ID is now `jira-peek`. Older installations used
+`hlmmkttm.jira-peek`; this was a fixed author namespace shown on every device,
+not a value read from your Jira account or local configuration.
+
+1. Close existing Peek viewers across Herdr sessions. Before uninstalling or
+   updating, locate your old config with
+   `herdr plugin config-dir hlmmkttm.jira-peek` and save a private copy of its
+   `config.sh` if you want to reuse your settings.
+2. Remove the old registration: `herdr plugin uninstall hlmmkttm.jira-peek` for
+   a GitHub-managed installation, or `herdr plugin unlink hlmmkttm.jira-peek`
+   for a locally linked checkout.
+3. Install with `herdr plugin install hilmimuktitama/herdr-jira-peek`, or update
+   your local checkout and link it again. Run **Set up Peek for Jira**. The new
+   config directory is shown by `herdr plugin config-dir jira-peek`; reapply
+   your saved settings there. TWG authentication remains managed by TWG.
+4. Update your keybinding to `command = "jira-peek.peek"` and any other action
+   bindings from `hlmmkttm.jira-peek.*` to `jira-peek.*`. Run
+   `herdr server reload-config`, then **Check Peek for Jira**.
+
+Herdr treats the new ID as a separate plugin identity. Selection and cache
+state are not migrated. To remove old retained data, follow
+[local data cleanup](SECURITY.md#local-data-cleanup) for the old plugin's state
+directory; do not confuse it with the new plugin's directory.
 
 ## Configure
 
@@ -242,7 +271,7 @@ example chosen to avoid the common `prefix+j` binding:
 [[keys.command]]
 key = "prefix+alt+j"
 type = "plugin_action"
-command = "hlmmkttm.jira-peek.peek"
+command = "jira-peek.peek"
 ```
 
 Reload the running Herdr server after changing the config:
@@ -252,9 +281,9 @@ herdr server reload-config
 ```
 
 The other action IDs are
-`hlmmkttm.jira-peek.open-browser`, `hlmmkttm.jira-peek.setup`,
-`hlmmkttm.jira-peek.doctor`, and
-`hlmmkttm.jira-peek.clear-cache`.
+`jira-peek.open-browser`, `jira-peek.setup`,
+`jira-peek.doctor`, and
+`jira-peek.clear-cache`.
 
 ## Controls: picker mode
 

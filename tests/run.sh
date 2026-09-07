@@ -38,7 +38,7 @@ esac
 # template, but must never overwrite an existing (or dangling symlink) file.
 SETUP_CONFIG="$TMP/setup-config"
 if ! setup_output=$(env HERDR_PLUGIN_ROOT="$ROOT" \
-  HERDR_PLUGIN_CONFIG_DIR="$SETUP_CONFIG" HERDR_PLUGIN_ID=hlmmkttm.jira-peek \
+  HERDR_PLUGIN_CONFIG_DIR="$SETUP_CONFIG" HERDR_PLUGIN_ID=jira-peek \
   sh "$ROOT/scripts/setup.sh" 2>&1); then
   fail 'setup installs config template'
 fi
@@ -47,7 +47,7 @@ setup_mode=$(ls -ld "$SETUP_CONFIG/config.sh" | awk '{ print $1 }')
 setup_mode=${setup_mode%@}
 [ "$setup_mode" = '-rw-------' ] || fail 'setup config is private'
 if setup_output_2=$(env HERDR_PLUGIN_ROOT="$ROOT" \
-  HERDR_PLUGIN_CONFIG_DIR="$SETUP_CONFIG" HERDR_PLUGIN_ID=hlmmkttm.jira-peek \
+  HERDR_PLUGIN_CONFIG_DIR="$SETUP_CONFIG" HERDR_PLUGIN_ID=jira-peek \
   sh "$ROOT/scripts/setup.sh" 2>&1); then
   fail 'setup refuses overwrite'
 fi
@@ -58,7 +58,7 @@ esac
 rm -f "$SETUP_CONFIG/config.sh"
 ln -s "$TMP/no-such-config" "$SETUP_CONFIG/config.sh"
 if env HERDR_PLUGIN_ROOT="$ROOT" HERDR_PLUGIN_CONFIG_DIR="$SETUP_CONFIG" \
-  HERDR_PLUGIN_ID=hlmmkttm.jira-peek sh "$ROOT/scripts/setup.sh" >/dev/null 2>&1; then
+  HERDR_PLUGIN_ID=jira-peek sh "$ROOT/scripts/setup.sh" >/dev/null 2>&1; then
   fail 'setup refuses dangling-symlink overwrite'
 fi
 pass 'setup refuses dangling-symlink overwrite'

@@ -18,7 +18,7 @@ pass() {
 
 [ -r "$MANIFEST" ] || fail 'manifest exists'
 
-grep -Fqx 'id = "hlmmkttm.jira-peek"' "$MANIFEST" \
+grep -Fqx 'id = "jira-peek"' "$MANIFEST" \
   || fail 'manifest plugin id'
 grep -Fqx 'platforms = ["macos", "linux"]' "$MANIFEST" \
   || fail 'manifest platform declarations'

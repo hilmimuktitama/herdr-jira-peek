@@ -4,7 +4,7 @@
 set -u
 umask 077
 
-plugin_id=${HERDR_PLUGIN_ID:-hlmmkttm.jira-peek}
+plugin_id=${HERDR_PLUGIN_ID:-jira-peek}
 config_dir=${HERDR_PLUGIN_CONFIG_DIR:-${HERDR_PLUGIN_STATE_DIR:-${TMPDIR:-/tmp}/herdr-jira-peek}}
 config_file=$config_dir/config.sh
 state=${HERDR_PLUGIN_STATE_DIR:-${TMPDIR:-/tmp}/herdr-jira-peek}

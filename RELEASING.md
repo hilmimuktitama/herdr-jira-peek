@@ -1,7 +1,7 @@
 # Release checklist
 
 Canonical repository: [hilmimuktitama/herdr-jira-peek](https://github.com/hilmimuktitama/herdr-jira-peek).
-Plugin ID: `hlmmkttm.jira-peek`.
+Plugin ID: `jira-peek`.
 
 The repository became public on 2026-09-07. `0.1.0` remains unreleased, with
 no tags or releases. Making the source public and publishing a versioned
@@ -12,8 +12,9 @@ release are separate steps. This project has no publish automation.
 - [x] Record maintainer confirmation of authority to publish, including
   employer, contributor, and third-party permissions.
 - [x] Include the MIT license, contribution terms, security policy, and Code of
-  Conduct. Both reporting policies use the maintainer-selected private contact
-  [hilmimukti@gmail.com](mailto:hilmimukti@gmail.com).
+  Conduct. GitHub private vulnerability reporting is enabled. The maintainer
+  approved publishing [hilmimukti@gmail.com](mailto:hilmimukti@gmail.com) for
+  conduct reports and as an alternative security-reporting contact.
 - [x] Document local pane capture, retained issue keys, cache behavior, and
   interrupted-process cleanup limits in [SECURITY.md](SECURITY.md).
 - [x] Add upstream setup, permission, privacy, and terms references in
@@ -42,6 +43,14 @@ release are separate steps. This project has no publish automation.
   links are not an independent verification of each agreement.
 - [ ] Confirm the reporting inbox receives private security and conduct reports;
   delivery has not been independently tested.
+
+## Plugin identity
+
+The plugin now uses the neutral ID `jira-peek`. Existing users must follow
+[the migration guide](README.md#migrate-from-the-old-plugin-id) to replace the
+old registration and action bindings. GitHub ownership is unchanged. The
+maintainer uses a GitHub noreply address for future commits from this checkout;
+previous public commit history has not been rewritten.
 
 ## Before publishing a versioned release
 
