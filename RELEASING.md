@@ -3,8 +3,9 @@
 Canonical repository: [hilmimuktitama/herdr-jira-peek](https://github.com/hilmimuktitama/herdr-jira-peek).
 Plugin ID: `hlmmkttm.jira-peek`.
 
-`0.1.0` is unreleased, with no tags or releases. Making the source public and publishing a versioned release
-are separate steps. This project has no publish automation.
+The repository became public on 2026-09-07. `0.1.0` remains unreleased, with
+no tags or releases. Making the source public and publishing a versioned
+release are separate steps. This project has no publish automation.
 
 ## Before making the repository public
 
@@ -17,21 +18,30 @@ are separate steps. This project has no publish automation.
   interrupted-process cleanup limits in [SECURITY.md](SECURITY.md).
 - [x] Add upstream setup, permission, privacy, and terms references in
   [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
-- [ ] Confirm the applicable dependency terms and organizational permissions
-  for the intended distribution; links alone do not establish approval.
-- [ ] Confirm the reporting inbox receives private security and conduct reports;
-  delivery has not been independently tested.
-- [ ] Review the exact tree and Git history selected for publication for secrets,
-  private tenant details, issue content, and generated state. Dated evidence
-  below covers only the revisions and files described there.
+- [x] Review the tree and Git history selected for publication for secrets,
+  private tenant details, issue content, and generated state. The documentation
+  cleanup was published as `5cebf44`; scan scope is recorded below.
 - [x] Set the GitHub description and the `herdr-plugin`, `jira`, and `terminal`
   topics; verified on 2026-09-07 while the repository remained private.
-- [ ] Make the repository public, remove the private-access note from README,
-  and verify the documented install path is publicly accessible.
+- [x] Make the repository public and remove the private-access note from README.
+  Anonymous GitHub API access confirmed public visibility and the expected
+  `main` commit; the anonymously fetched root manifest matched the checkout.
+  Installation itself was not rerun.
 - [ ] Confirm marketplace discovery after publication. Herdr indexes public
   repositories with the `herdr-plugin` topic and a valid manifest on the default
   branch; listing is automatic and is not an endorsement. See the
   [marketplace documentation](https://herdr.dev/docs/marketplace/).
+  Eligibility is confirmed: the repository is public, has the topic and root
+  manifest, and is neither a fork nor archived. It was absent from the published
+  index generated at `2026-09-07T13:31:08.853Z`; listing awaits a later refresh.
+
+## Maintainer follow-up
+
+- [ ] Confirm the applicable dependency terms and organizational permissions
+  for the intended distribution; the recorded authority to publish and upstream
+  links are not an independent verification of each agreement.
+- [ ] Confirm the reporting inbox receives private security and conduct reports;
+  delivery has not been independently tested.
 
 ## Before publishing a versioned release
 
@@ -48,12 +58,12 @@ are separate steps. This project has no publish automation.
 
 ## Review evidence — 2026-09-07
 
-- Latest existing CI: both `shell (ubuntu-latest)` and `shell (macos-latest)`
+- Prepublication baseline CI: both `shell (ubuntu-latest)` and `shell (macos-latest)`
   passed for `829e3c01c2a5d8c85c66212e262f9bca2c6b5d34` in
   [run 34082990613](https://github.com/hilmimuktitama/herdr-jira-peek/actions/runs/34082990613).
   This is evidence for that commit, not for later edits.
-- Gitleaks 8.30.1 found no leaks in the working files or Git history through
-  `829e3c0` (six commits, using `--all --reflog`). Manual review of historical
+- Gitleaks 8.30.1 found no leaks in the publication working files or Git history
+  through `5cebf44` (seven commits, using `--all --reflog`). Manual review of historical
   filenames and URL hosts found no confirmed private configuration or real
   Jira tenant URLs. Scanner results are supporting evidence, not a guarantee.
 - All five screenshots were visually reviewed: they use fictional issue data
