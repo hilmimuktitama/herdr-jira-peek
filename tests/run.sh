@@ -1249,7 +1249,7 @@ unset FZF_STDERR
 
 NO_FZF_BIN="$TMP/no-fzf-bin"
 mkdir "$NO_FZF_BIN"
-for tool in env sh sed awk tr wc mktemp mkdir mv rm cp ps sleep jq less twg herdr cat grep find date dirname tee chmod cksum uname basename sort head cut readlink tput cmp; do
+for tool in env sh sed awk tr wc mktemp mkdir rmdir mv rm cp ps sleep jq less twg herdr cat grep find date dirname tee chmod cksum uname basename sort head cut readlink tput cmp; do
   tool_path=$(command -v "$tool" 2>/dev/null || true)
   [ -n "$tool_path" ] && ln -s "$tool_path" "$NO_FZF_BIN/$tool"
 done
@@ -1268,14 +1268,31 @@ case "$doctor_no_less" in
   *) fail 'doctor less-only diagnostic' ;;
 esac
 
-if ! missing_fzf_view=$(printf 'q\n' | env PATH="$NO_FZF_BIN" HERDR_PLUGIN_CONFIG_DIR="$CONFIG" HERDR_PLUGIN_STATE_DIR="$STATE" COLUMNS=80 sh "$ROOT/scripts/viewer.sh" 2>&1); then
-  fail 'missing-fzf pager fallback'
+missing_fzf_twg_before=$(wc -l < "$TWG_LOG" | tr -d ' ')
+: >> "$HERDR_LOG"
+missing_fzf_herdr_before=$(wc -l < "$HERDR_LOG" | tr -d ' ')
+for entrypoint in peek peek-url viewer; do
+  if missing_fzf_output=$(env PATH="$NO_FZF_BIN" HERDR_PANE_ID=focused-pane \
+    HERDR_PLUGIN_CLICKED_URL=https://jira.example.test/browse/ABC-123 \
+    HERDR_PLUGIN_CONFIG_DIR="$CONFIG" HERDR_PLUGIN_STATE_DIR="$TMP/missing-fzf-$entrypoint" \
+    sh "$ROOT/scripts/$entrypoint.sh" 2>&1); then
+    fail "$entrypoint accepts missing fzf"
+  fi
+  case "$missing_fzf_output" in
+    *'fzf is required'*'brew install fzf'*'PATH used by Herdr'*) pass "$entrypoint explains how to install fzf" ;;
+    *) fail "$entrypoint missing-fzf diagnostic" ;;
+  esac
+done
+[ "$(wc -l < "$TWG_LOG" | tr -d ' ')" = "$missing_fzf_twg_before" ] || fail 'missing fzf invokes TWG'
+[ "$(wc -l < "$HERDR_LOG" | tr -d ' ')" = "$missing_fzf_herdr_before" ] || fail 'missing fzf reads or opens a pane'
+if missing_fzf_doctor=$(env PATH="$NO_FZF_BIN" HERDR_PLUGIN_CONFIG_DIR="$DOCTOR_CONFIG" \
+  HERDR_PLUGIN_STATE_DIR="$DOCTOR_STATE" sh "$ROOT/scripts/doctor.sh" 2>&1); then
+  fail 'doctor accepts missing fzf'
 fi
-case "$missing_fzf_view" in
-  *'picker unavailable: fzf is not installed'*'1) ABC-123'*'Number/exact key or Enter reads.'*'q closes.'*) pass 'missing-fzf menu fallback notice' ;;
-  *) fail 'missing-fzf pager fallback notice' ;;
+case "$missing_fzf_doctor" in
+  *'FAIL fzf is required'*'brew install fzf'*) pass 'doctor requires fzf with installation instructions' ;;
+  *) fail 'doctor missing-fzf diagnostic' ;;
 esac
-pass 'missing-fzf menu instructions'
 
 VIEWER_MANY_CONFIG="$TMP/viewer-many-config"
 VIEWER_MANY_STATE="$TMP/viewer-many-state"
@@ -1290,17 +1307,27 @@ while [ "$i" -le 11 ]; do
   printf '%s\n' "{\"key\":\"$key\",\"summary\":\"Synthetic $i\",\"status\":{\"name\":\"Done\"},\"description\":{\"type\":\"doc\",\"content\":[{\"type\":\"paragraph\",\"content\":[{\"type\":\"text\",\"text\":\"Body $i\"}]}]}}" > "$VIEWER_MANY_STATE/cache/$key.json"
   i=$((i + 1))
 done
-for tool in env sh sed awk tr wc mktemp mkdir mv rm cp ps sleep jq less twg herdr cat grep find date dirname tee chmod cksum uname basename sort head cut readlink tput cmp; do
+for tool in env sh sed awk tr wc mktemp mkdir rmdir mv rm cp ps sleep jq less twg herdr cat grep find date dirname tee chmod cksum uname basename sort head cut readlink tput cmp; do
   [ "$tool" = twg ] && continue
   ln -s "$NO_FZF_BIN/$tool" "$VIEWER_MANY_BIN/$tool"
 done
 ln -s "$BIN/twg" "$VIEWER_MANY_BIN/twg"
-many_run() { env NO_COLOR=1 PATH="$VIEWER_MANY_BIN" HERDR_PLUGIN_CONFIG_DIR="$VIEWER_MANY_CONFIG" HERDR_PLUGIN_STATE_DIR="$VIEWER_MANY_STATE" "$@"; }
+ln -s "$BIN/fzf" "$VIEWER_MANY_BIN/fzf"
+many_run() { env NO_COLOR=1 FZF_EXIT_STATUS=2 PATH="$VIEWER_MANY_BIN" HERDR_PLUGIN_CONFIG_DIR="$VIEWER_MANY_CONFIG" HERDR_PLUGIN_STATE_DIR="$VIEWER_MANY_STATE" "$@"; }
 # Basic-mode rescan is source-only and must not invoke metadata.
+basic_run() {
+  many_run env HERDR_VIEWER_SOURCE_PANE=focused-pane HERDR_VIEWER_SOURCE_TERMINAL=terminal-source \
+    HERDR_VISIBLE_TEXT='ABC-1 ABC-3' HERDR_RECENT_TEXT= HERDR_DETECTION_TEXT= \
+    HERDR_VIEWER_CANDIDATES="$(printf '%s\n' ABC-1 ABC-2)" sh "$ROOT/scripts/viewer.sh"
+}
+# Account for metadata loaded before fzf fails and the recovery menu starts.
 basic_before=$(wc -l < "$TWG_LOG" | tr -d ' ')
-if ! basic_output=$(printf 's\nq\n' | env HERDR_VIEWER_SOURCE_PANE=focused-pane HERDR_VIEWER_SOURCE_TERMINAL=terminal-source HERDR_VISIBLE_TEXT='ABC-1 ABC-3' HERDR_RECENT_TEXT= HERDR_DETECTION_TEXT= HERDR_VIEWER_CANDIDATES="$(printf '%s\n' ABC-1 ABC-2)" FZF_EXIT_STATUS=2 PATH="$NO_FZF_BIN" HERDR_PLUGIN_CONFIG_DIR="$VIEWER_MANY_CONFIG" HERDR_PLUGIN_STATE_DIR="$VIEWER_MANY_STATE" sh "$ROOT/scripts/viewer.sh" 2>&1); then fail 'basic s rescan'; fi
+printf 'q\n' | basic_run >/dev/null 2>&1 || fail 'basic startup baseline'
+basic_startup_calls=$(( $(wc -l < "$TWG_LOG" | tr -d ' ') - basic_before ))
+basic_before=$(wc -l < "$TWG_LOG" | tr -d ' ')
+if ! basic_output=$(printf 's\nq\n' | basic_run 2>&1); then fail 'basic s rescan'; fi
 case "$basic_output" in *'Rescanned: 2 issues'*'Selected ABC-1 (2/2)'*) pass 'basic s rescan reports retained selection' ;; *) fail 'basic s rescan output' ;; esac
-[ "$(wc -l < "$TWG_LOG" | tr -d ' ')" = "$basic_before" ] || fail 'basic rescan starts no metadata calls'
+[ "$(( $(wc -l < "$TWG_LOG" | tr -d ' ') - basic_before ))" = "$basic_startup_calls" ] || fail 'basic rescan starts no metadata calls'
 [ "$(wc -l < "$VIEWER_MANY_STATE/candidates" | tr -d ' ')" = 11 ] || fail 'basic rescan keeps session candidates isolated'
 pass 'basic s rescan avoids metadata calls'
 many_fzf_output=$(env NO_COLOR=1 FZF_EXIT_STATUS=2 PATH="$BIN:$VIEWER_MANY_BIN" HERDR_PLUGIN_CONFIG_DIR="$VIEWER_MANY_CONFIG" HERDR_PLUGIN_STATE_DIR="$VIEWER_MANY_STATE" sh "$ROOT/scripts/viewer.sh" <<EOF

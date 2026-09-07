@@ -14,7 +14,7 @@ distribute it under those same MIT terms.
 - [TWG](https://developer.atlassian.com/cloud/twg-cli/getting-started/installation/)
   >= 1.2.6, configured with Atlassian OAuth for live Jira use
 - A POSIX shell, `jq`, and `less`
-- `fzf` and `expect` for the interactive PTY coverage (with `less`)
+- `fzf` for running the plugin; `expect` for interactive PTY coverage (with `less`)
 - ShellCheck 0.11.0 for the release lint gate (the version pinned in CI)
 
 ## Local development

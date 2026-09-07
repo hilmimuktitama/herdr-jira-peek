@@ -13,6 +13,10 @@ die() {
   exit 1
 }
 
+require_fzf() {
+  command -v fzf >/dev/null 2>&1 || die 'fzf is required; install it with brew install fzf (macOS) or your Linux package manager, and make sure it is on the PATH used by Herdr. Then rerun the doctor action.'
+}
+
 # Public defaults. Authentication belongs to TWG, not this plugin config.
 JIRA_BASE=
 JIRA_SITE=

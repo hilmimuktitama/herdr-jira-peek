@@ -165,7 +165,11 @@ if command -v less >/dev/null 2>&1; then
 else
   fail 'no pager found; install less'
 fi
-  if command -v fzf >/dev/null 2>&1; then ok 'fzf is available for the interactive picker'; else warn 'fzf is optional; picker falls back to a numbered issue list'; fi
+if command -v fzf >/dev/null 2>&1; then
+  ok 'fzf is available for the interactive picker'
+else
+  fail 'fzf is required; install it with brew install fzf (macOS) or your Linux package manager, and make sure it is on the PATH used by Herdr'
+fi
 if command -v curl >/dev/null 2>&1; then ok 'curl is available for progressive picker updates'; else warn 'curl is optional; metadata loads in one batch before the picker starts'; fi
 
 twg_tmp=$(mktemp "${TMPDIR:-/tmp}/peek-for-jira-doctor.XXXXXX" 2>/dev/null || true)

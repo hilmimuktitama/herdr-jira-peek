@@ -68,5 +68,6 @@ printf '%s\n' 'Peek for Jira setup: config template installed.'
 printf '%s\n' 'Next steps (run these exactly, after editing the template values):'
 printf '1. Edit %s and set JIRA_BASE, JIRA_SITE, and your narrow JIRA_PROJECTS allowlist.\n' "$config_file"
 printf '%s\n' '2. Authenticate TWG with Atlassian OAuth once: twg setup'
-printf '%s\n' "3. Check the installation: herdr plugin action invoke --plugin $plugin_id doctor"
-printf '%s\n' '4. Add the keybinding shown in README.md, then reload Herdr: herdr server reload-config'
+printf '%s\n' '3. Install the required fzf executable: brew install fzf on macOS, or use your Linux package manager. It must be on the PATH used by Herdr.'
+printf '%s\n' "4. Check the installation: herdr plugin action invoke --plugin $plugin_id doctor"
+printf '%s\n' '5. Add the prefix+i keybinding shown in README.md, then reload Herdr: herdr server reload-config'

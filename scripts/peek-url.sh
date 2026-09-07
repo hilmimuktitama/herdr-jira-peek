@@ -6,6 +6,7 @@ set -eu
 . "$(dirname "$0")/common.sh"
 lock_acquire
 if toggle_viewer; then exit 0; fi
+require_fzf
 
 url=${HERDR_PLUGIN_CLICKED_URL:-}
 [ -n "$url" ] || die 'no clicked URL in context'

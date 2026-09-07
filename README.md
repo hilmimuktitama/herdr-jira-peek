@@ -130,12 +130,19 @@ preview; descriptions and comments are rendered as readable text.
 - The official Atlassian [TWG CLI](https://developer.atlassian.com/cloud/twg-cli/getting-started/installation/)
   >= 1.2.6, authenticated with its Atlassian OAuth flow
 - `git` for installation; `jq`, `less`, a POSIX shell, and standard macOS/Linux utilities
-- `fzf` is optional; without it a numbered list keeps every detected issue reachable. Enter reads the selected issue and `q` returns to the list (and exits from the list).
+- [`fzf`](https://github.com/junegunn/fzf#installation) is required for the picker
 - Progressive updates additionally use a recent fzf exposing
   `--listen-unsafe`, `--id-nth`, and `--track`, plus `curl`; older fzf or no
   curl uses the batch fallback
 - On macOS: `open` and `pbcopy`; on Linux: `xdg-open` and one of `wl-copy`,
   `xclip`, or `xsel`
+
+Install `fzf` with `brew install fzf` on macOS or `sudo apt install fzf` on
+Debian/Ubuntu; see its installation guide above for other platforms. The plugin
+uses the executable directly; fzf shell integration is not required. It must
+be on the `PATH` used by Herdr. The plugin does not install system packages.
+If fzf is missing, doctor fails and the peek action reports installation
+instructions before opening a split.
 
 ## Install and set up
 
@@ -264,15 +271,19 @@ cleanup limits.
 
 ## Keybinding
 
-Add the picker action to `~/.config/herdr/config.toml`. `prefix+alt+j` is an
-example chosen to avoid the common `prefix+j` binding:
+Add the picker action to `~/.config/herdr/config.toml`. We recommend `prefix+i`;
+choose another unused key if you already have that binding. Installation does
+not add the binding automatically:
 
 ```toml
 [[keys.command]]
-key = "prefix+alt+j"
+key = "prefix+i"
 type = "plugin_action"
 command = "jira-peek.peek"
 ```
+
+With Herdr's default prefix, press `Ctrl+B`, release it, then press `i`.
+This binding avoids relying on terminal handling of Alt combinations.
 
 Reload the running Herdr server after changing the config:
 
@@ -324,7 +335,8 @@ details**.
 
 ## Controls: basic mode
 
-Without fzf, the numbered list keeps every detected issue reachable. Enter
+If an installed fzf fails to start, a numbered recovery menu keeps detected
+issues reachable. Upgrade fzf if this happens. Enter
 reads the selected issue; enter a number or exact key to select and read it.
 Use `n`/`p` for next/previous, `r` to refresh only the selected issue, `s` to
 rescan the original terminal, and `q` to close. Every command must be followed
@@ -348,8 +360,14 @@ terminal scrollback limits can prevent recovery of older output.
   match the key.
 - **A terminal Jira link opens normally:** this is intentional. Peek for Jira
   does not register a generic link handler; use the pane-scanning `peek` action.
-- **The adjacent pane opens without a picker:** install `fzf`; basic mode still
-  displays the numbered issue list and selected issue reader.
+- **Doctor or peek says fzf is required:** install `fzf` using the
+  [requirements](#requirements) instructions and ensure Herdr can find it on
+  `PATH`, then rerun doctor. No split opens while fzf is missing.
+- **The adjacent pane shows a numbered recovery menu:** an installed `fzf`
+  failed to start. Review the displayed diagnostic and upgrade fzf.
+- **The shortcut does nothing:** confirm the binding uses `jira-peek.peek`,
+  reload Herdr's config, and try `prefix+i` if an Alt combination is not
+  reaching Herdr. Run doctor to check dependencies and configuration.
 - **Browser or copy controls fail:** install the platform utility listed under
   Requirements and confirm it is on `PATH`.
 

@@ -40,7 +40,7 @@ These tools are installed separately, rather than bundled with the plugin:
 | --- | --- | --- |
 | jq | JSON parsing and rendering | [Copyright and license notices](https://github.com/jqlang/jq/blob/master/COPYING) |
 | less | Full-screen issue reader | [Project and source distributions](https://www.greenwoodsoftware.com/less/download.html) |
-| fzf (optional) | Searchable picker | [License](https://github.com/junegunn/fzf/blob/master/LICENSE) |
+| fzf | Required searchable picker | [License](https://github.com/junegunn/fzf/blob/master/LICENSE) |
 | curl (optional) | Local socket notifications for progressive picker updates | [Copyright and license](https://curl.se/docs/copyright.html) |
 
 Git, shell utilities, and browser/clipboard commands come from the user's

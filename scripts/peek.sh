@@ -5,6 +5,7 @@ set -eu
 . "$(dirname "$0")/common.sh"
 lock_acquire
 if toggle_viewer; then exit 0; fi
+require_fzf
 
 pid=$(pane_id)
 [ -n "$pid" ] || die 'no pane in context'

@@ -5,6 +5,7 @@
 # everything else is a keybinding. Enter reads full-screen and returns here; Esc closes.
 set -eu
 . "$(dirname "$0")/common.sh"
+require_fzf
 DIR=$(CDPATH= cd "$(dirname "$0")" && pwd)
 export DIR
 # fzf binds from the private viewer directory; child scripts still need stable
@@ -95,12 +96,8 @@ basic_menu() {
   done
 }
 
-# fzf is optional; the basic menu must not start metadata workers.
+# Start each viewer with fresh metadata coordination state.
 unset VIEWER_METADATA_MODE VIEWER_COORDINATOR_PID
-if ! command -v fzf >/dev/null 2>&1; then
-  basic_menu 'fzf is not installed'
-  exit 0
-fi
 
 # Prepare an initial snapshot, then load a capped metadata batch. Full issue
 # detail is fetched lazily when selected for preview or reading.

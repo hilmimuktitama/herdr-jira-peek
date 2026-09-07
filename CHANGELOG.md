@@ -19,7 +19,10 @@ Initial release planned; no release tag has been published.
 - Configure the plugin with setup and doctor actions, an adjustable issue-cache
   TTL, and an action to clear cached issue files. See [data retention and cleanup
   limits](SECURITY.md) for state retained outside the cache.
-- Use a numbered issue menu when fzf is unavailable and batch metadata loading
-  when progressive picker updates are unavailable.
+- Require fzf for the picker; setup explains installation, doctor fails when
+  it is missing, and peek reports the dependency before opening a split.
+- Retain a numbered recovery menu for fzf startup errors and batch metadata
+  loading when progressive picker updates are unavailable.
+- Recommend an explicit `prefix+i` keybinding to avoid Alt key handling issues.
 - Follow a visual README tour using fictional Jira data, including four UI
   screenshots and a source-and-picker workflow composition.
