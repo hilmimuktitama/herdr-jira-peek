@@ -134,7 +134,7 @@ If this repository is public and available to your Herdr installation, install
 it through Herdr:
 
 ```sh
-herdr plugin install hlmmkttm/herdr-jira-peek
+herdr plugin install hilmimuktitama/herdr-jira-peek
 ```
 
 Then select **Set up Peek for Jira** from Herdr's plugin actions. The action

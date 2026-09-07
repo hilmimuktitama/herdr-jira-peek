@@ -7,8 +7,9 @@ unreleased until every applicable item is verified.
 
 - [x] Confirm the maintainer has authority to publish this repository and that
   employer, contributor, and third-party permissions allow publication.
-- [ ] Confirm the canonical public repository URL and namespace, including the
-  final Herdr plugin identifier (`hlmmkttm.jira-peek`).
+- [x] Confirm the canonical repository:
+  [hilmimuktitama/herdr-jira-peek](https://github.com/hilmimuktitama/herdr-jira-peek).
+  The Herdr plugin identifier remains `hlmmkttm.jira-peek`.
 - [x] Scan the final tree for secrets, credentials, Jira URLs, issue content,
   private tenant details, and generated data. The 2026-09-07 manual review
   covered source, scripts, docs, and images; no confirmed secrets or private
