@@ -48,9 +48,9 @@ comments, commits, code, wiki edits, issues, and other contributions that are
 not aligned to this Code of Conduct, and will communicate reasons for
 moderation decisions when appropriate.
 
-To report an incident, use the private contact route that maintainers will add
-before the first public release. No contact route is configured yet; do not use
-a public issue for a sensitive report. This is a release blocker.
+To report an incident, email
+[hilmimukti@gmail.com](mailto:hilmimukti@gmail.com) privately with the subject
+"Peek for Jira conduct report". Do not use a public issue for a sensitive report.
 
 ## Scope
 
@@ -62,10 +62,8 @@ appointed representative at an online or offline event.
 
 ## Enforcement
 
-Instances of abusive, harassing, or otherwise unacceptable behavior cannot yet
-be reported through a configured private contact. Maintainers must add and test
-that separate conduct route before the first public release; this remains a
-release blocker.
+Instances of abusive, harassing, or otherwise unacceptable behavior may be
+reported privately to [hilmimukti@gmail.com](mailto:hilmimukti@gmail.com).
 All complaints will be reviewed and investigated promptly and fairly.
 
 All community leaders are obligated to respect the privacy and security of the

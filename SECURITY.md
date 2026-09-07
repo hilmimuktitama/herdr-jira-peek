@@ -7,10 +7,10 @@ the plugin by the official TWG CLI.
 
 ## Reporting a vulnerability
 
-Please do not disclose vulnerabilities in a public issue. Use GitHub private
-vulnerability reporting once it is enabled for the published repository.
-Maintainers must enable and test that private reporting channel before the first
-public release.
+Please report vulnerabilities privately to
+[hilmimukti@gmail.com](mailto:hilmimukti@gmail.com), with the subject
+"Peek for Jira security report". Do not disclose vulnerabilities in a public
+issue.
 
 Include the affected version, a concise description of the impact, reproduction
 steps, and any suggested mitigation. Redact Jira URLs, issue content,

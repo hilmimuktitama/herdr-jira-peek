@@ -16,18 +16,19 @@ unreleased until every applicable item is verified.
   tenant data were found. This was not a gitleaks run.
 - [ ] Scan Git history for the same items before publication; the final-tree
   scan does not replace a history scan.
-- [ ] Enable and test GitHub private vulnerability reporting for the published
-  repository, or document the actual private reporting route in `SECURITY.md`.
-- [ ] Provide a separate suitable private contact for Code of Conduct reports
-  and update the conduct policy with that actual route; do not reuse the
-  vulnerability channel by assumption or invent a contact.
+- [x] Document the maintainer-selected private vulnerability reporting contact
+  in `SECURITY.md`: [hilmimukti@gmail.com](mailto:hilmimukti@gmail.com).
+- [x] Document the Code of Conduct reporting contact in `CODE_OF_CONDUCT.md`.
+  The maintainer selected the same address for both policies, with distinct
+  suggested email subjects for security and conduct reports.
 - [ ] Confirm the availability, licensing, terms, privacy, and permission
   requirements of Herdr, TWG, and runtime dependencies (`jq`, `less`, `curl`,
   browser/clipboard utilities, and optional `fzf`), and keep the existing
   notices accurate.
-- [ ] Run the existing local/CI checks from `CONTRIBUTING.md` and confirm CI is
-  green on its supported macOS and Linux jobs. CI remains unchecked: the Linux
-  job has not been run. No public publication has occurred.
+- [x] Run the existing local/CI checks from `CONTRIBUTING.md` and confirm CI is
+  green on its supported macOS and Linux jobs. Both passed for `552fd2a` in
+  [CI run 34079614103](https://github.com/hilmimuktitama/herdr-jira-peek/actions/runs/34079614103).
+  No public publication has occurred.
 
 ### Local verification record — 2026-09-07
 
@@ -36,7 +37,7 @@ unreleased until every applicable item is verified.
   the final documentation-only change.
 - [x] Original owned shellcheck 0.11.0 run passed for
   `config.example.sh scripts/*.sh tests/*.sh`.
-- [ ] Full CI verification, including Linux, remains outstanding.
+- [x] Full CI verification passed on macOS and Linux for `552fd2a`.
 
 The original checks were:
 
@@ -71,8 +72,8 @@ reference, for example `herdr plugin install <owner>/<repository> --ref
   before it exists.
 - [ ] Publish only from the reviewed canonical repository after preparation is
   complete; there is no publish automation in this project.
-- [ ] Publish only after the private vulnerability-reporting channel and the
-  separate Code of Conduct contact are enabled and tested.
+- [ ] Confirm the selected email inbox receives private vulnerability and
+  conduct reports before publication. Email delivery has not been tested here.
 - [ ] After publication, verify the documented install path and add the
   `herdr-plugin` topic to the repository if that is the chosen marketplace
   discovery mechanism.
