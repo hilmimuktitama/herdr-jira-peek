@@ -4,6 +4,10 @@
 
 Initial release planned; no release tag has been published.
 
+- Check mandatory fzf, jq, less, and TWG prerequisites during setup, including
+  TWG minimum version and authentication/connectivity. Preserve config on reruns.
+- Add an interactive dependency installer with per-install approval and separate
+  user-managed TWG OAuth login. Refuse to open the picker when TWG is missing.
 - Use the neutral plugin ID `jira-peek`. Existing development installations
   need to [migrate their registration, settings, and bindings](README.md#migrate-from-the-old-plugin-id).
 - Accept security reports through GitHub private vulnerability reporting,

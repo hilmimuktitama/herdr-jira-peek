@@ -6,6 +6,7 @@ set -eu
 lock_acquire
 if toggle_viewer; then exit 0; fi
 require_fzf
+require_twg
 
 pid=$(pane_id)
 [ -n "$pid" ] || die 'no pane in context'

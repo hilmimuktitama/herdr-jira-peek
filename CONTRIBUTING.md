@@ -26,12 +26,18 @@ herdr plugin link "$PWD"
 ```
 
 Run the **Set up Peek for Jira** action from Herdr after linking. Setup copies
-from Herdr's `HERDR_PLUGIN_ROOT` and refuses to overwrite an existing config;
-it does not run TWG login/setup. Keep a test Jira account and a narrow
+from Herdr's `HERDR_PLUGIN_ROOT`, preserves existing config, and checks tools
+and TWG authentication/connectivity. The separate dependency installer asks
+before installing tools and skips TWG login; run `twg setup` yourself. Keep a
+test Jira account and a narrow
 `JIRA_PROJECTS` allowlist. Never commit credentials, private tenant details, or
 cached issue data. Automated tests fake Herdr and TWG, so they do not require
 either CLI, credentials, or a live Jira site. Some checks use real `fzf`,
 `less`, and `expect` binaries.
+
+`sh tests/dependencies.sh` checks setup and the installer with isolated fake
+tools. Its approval-path checks use `expect`; no real packages, downloads, or
+OAuth sessions are used by these tests.
 
 ## Checks
 

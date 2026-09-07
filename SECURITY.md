@@ -5,6 +5,14 @@ Jira and Atlassian are Atlassian trademarks. This plugin is MIT-licensed and
 does not manage credentials; Atlassian OAuth authentication is handled outside
 the plugin by the official TWG CLI.
 
+The optional `install-dependencies` action opens an interactive terminal and
+requires approval before running a package manager or Atlassian's TWG
+installer. The latter is downloaded from Atlassian over HTTPS and executed
+with `--skip-login --skip-skills`; the upstream installer manages TWG files and
+may update shell PATH configuration. Installation runs locally with the user's
+permissions; Linux package managers may request sudo. Setup checks capture no
+credentials and discard TWG authentication diagnostics instead of printing them.
+
 ## Reporting a vulnerability
 
 Use [GitHub's private vulnerability reporting](https://github.com/hilmimuktitama/herdr-jira-peek/security/advisories/new)

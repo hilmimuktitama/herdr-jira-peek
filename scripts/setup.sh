@@ -1,7 +1,10 @@
 #!/bin/sh
-# Install the public config template for Peek for Jira.
+# Preserve or install the public config template, then check prerequisites.
+# shellcheck source=scripts/dependencies.sh
+# shellcheck disable=SC2329 # Cleanup is invoked by traps.
 set -eu
 umask 077
+. "$(dirname "$0")/dependencies.sh"
 
 plugin_id=${HERDR_PLUGIN_ID:-jira-peek}
 config_dir=${HERDR_PLUGIN_CONFIG_DIR:-${HERDR_PLUGIN_STATE_DIR:-${TMPDIR:-/tmp}/herdr-jira-peek}}
@@ -33,41 +36,51 @@ template=$plugin_root/config.example.sh
 
 # Treat a dangling symlink as an existing config too: setup must never follow
 # an ambiguous target or overwrite a user's file.
-if [ -e "$config_file" ] || [ -L "$config_file" ]; then
-  printf '%s\n' "Peek for Jira setup: refusing to overwrite $config_file" >&2
-  printf '%s\n' 'No files were changed. Edit the existing config, then run the doctor action.' >&2
+if [ -L "$config_file" ] || { [ -e "$config_file" ] && [ ! -f "$config_file" ]; }; then
+  printf '%s\n' "Peek for Jira setup: refusing an unsafe config file at $config_file" >&2
   exit 1
 fi
 
-mkdir -p "$config_dir" || {
-  printf '%s\n' "Peek for Jira setup: could not create $config_dir" >&2
-  exit 1
-}
-chmod 700 "$config_dir" || {
-  printf '%s\n' "Peek for Jira setup: could not protect $config_dir" >&2
-  exit 1
-}
+if [ -f "$config_file" ]; then
+  printf '%s\n' "Peek for Jira setup: preserving existing config at $config_file"
+else
+  mkdir -p "$config_dir" || {
+    printf '%s\n' "Peek for Jira setup: could not create $config_dir" >&2
+    exit 1
+  }
+  chmod 700 "$config_dir" || {
+    printf '%s\n' "Peek for Jira setup: could not protect $config_dir" >&2
+    exit 1
+  }
 
-tmp_file=$(mktemp "$config_dir/.config.sh.XXXXXX") || {
-  printf '%s\n' 'Peek for Jira setup: could not create a private temporary config.' >&2
-  exit 1
-}
-cleanup() { rm -f "$tmp_file"; }
-trap cleanup 0 1 2 15
+  tmp_file=$(mktemp "$config_dir/.config.sh.XXXXXX") || {
+    printf '%s\n' 'Peek for Jira setup: could not create a private temporary config.' >&2
+    exit 1
+  }
+  cleanup() { rm -f "$tmp_file"; }
+  trap cleanup 0 1 2 15
 
-if ! cp "$template" "$tmp_file" || ! chmod 600 "$tmp_file"; then
-  printf '%s\n' "Peek for Jira setup: could not install $config_file" >&2
-  exit 1
+  if ! cp "$template" "$tmp_file" || ! chmod 600 "$tmp_file"; then
+    printf '%s\n' "Peek for Jira setup: could not install $config_file" >&2
+    exit 1
+  fi
+  if ! mv "$tmp_file" "$config_file"; then
+    printf '%s\n' "Peek for Jira setup: could not install $config_file" >&2
+    exit 1
+  fi
+
+  printf '%s\n' 'Peek for Jira setup: config template installed.'
 fi
-if ! mv "$tmp_file" "$config_file"; then
-  printf '%s\n' "Peek for Jira setup: could not install $config_file" >&2
-  exit 1
-fi
 
-printf '%s\n' 'Peek for Jira setup: config template installed.'
-printf '%s\n' 'Next steps (run these exactly, after editing the template values):'
+setup_status=0
+if ! check_dependencies; then
+  setup_status=1
+  printf '%s\n' 'Setup is incomplete. Select Install Peek for Jira dependencies to review and approve missing tool installations.'
+  printf '%s\n' 'If TWG is installed but unauthenticated, run twg setup yourself in a terminal; the plugin never starts OAuth.'
+fi
+printf '%s\n' 'Next steps:'
 printf '1. Edit %s and set JIRA_BASE, JIRA_SITE, and your narrow JIRA_PROJECTS allowlist.\n' "$config_file"
-printf '%s\n' '2. Authenticate TWG with Atlassian OAuth once: twg setup'
-printf '%s\n' '3. Install the required fzf executable: brew install fzf on macOS, or use your Linux package manager. It must be on the PATH used by Herdr.'
-printf '%s\n' "4. Check the installation: herdr plugin action invoke --plugin $plugin_id doctor"
-printf '%s\n' '5. Add the prefix+i keybinding shown in README.md, then reload Herdr: herdr server reload-config'
+printf '%s\n' '2. Resolve any dependency or authentication failures above, then rerun setup.'
+printf '%s\n' "3. Check the configuration and Jira access: herdr plugin action invoke --plugin $plugin_id doctor"
+printf '%s\n' '4. Add the prefix+i keybinding shown in README.md, then reload Herdr: herdr server reload-config'
+exit "$setup_status"

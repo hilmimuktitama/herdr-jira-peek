@@ -1,15 +1,17 @@
 #!/bin/sh
 # shellcheck disable=SC1007,SC2012,SC2015,SC2016,SC2086,SC2329 # Read-only diagnostics use intentional shell idioms and trap callbacks.
 # Read-only installation and configuration checks for Peek for Jira.
+# shellcheck source=scripts/dependencies.sh
 set -u
 umask 077
+. "$(dirname "$0")/dependencies.sh"
 
 plugin_id=${HERDR_PLUGIN_ID:-jira-peek}
 config_dir=${HERDR_PLUGIN_CONFIG_DIR:-${HERDR_PLUGIN_STATE_DIR:-${TMPDIR:-/tmp}/herdr-jira-peek}}
 config_file=$config_dir/config.sh
 state=${HERDR_PLUGIN_STATE_DIR:-${TMPDIR:-/tmp}/herdr-jira-peek}
 cache=$state/cache
-required_twg=1.2.6
+required_twg=$REQUIRED_TWG
 twg_bin=${TWG_BIN_PATH:-twg}
 failures=0
 warnings=0
@@ -180,31 +182,17 @@ if ! command -v "$twg_bin" >/dev/null 2>&1; then
   if [ "$twg_bin" = twg ] && [ -n "${HOME:-}" ] \
     && [ -x "$HOME/.local/bin/twg" ]; then
     twg_bin=$HOME/.local/bin/twg
-    warn 'TWG was found at ~/.local/bin/twg; add ~/.local/bin to PATH'
+    fail 'TWG was found at ~/.local/bin/twg but is missing from the PATH used by Herdr; add ~/.local/bin to PATH and restart Herdr from the updated shell'
   else
     twg_available=0
     fail "TWG CLI is missing; install the official Atlassian TWG CLI (>= $required_twg), ensure it is on PATH, then run \`twg setup\`"
   fi
 fi
 if [ "$twg_available" -eq 1 ]; then
-  version_text=$("$twg_bin" --version 2>/dev/null || true)
-  version=$(printf '%s\n' "$version_text" | sed -n 's/.*\([0-9][0-9]*\)\.\([0-9][0-9]*\)\.\([0-9][0-9]*\).*/\1.\2.\3/p' | sed -n '1p')
-  if [ -z "$version" ]; then
-    fail "could not determine TWG version; install TWG CLI >= $required_twg"
+  if twg_version_supported "$twg_bin"; then
+    ok "TWG CLI meets minimum version $required_twg"
   else
-    old_ifs=$IFS; IFS=.; set -- $version; IFS=$old_ifs
-    got_major=${1:-0}; got_minor=${2:-0}; got_patch=${3:-0}
-    IFS=.; set -- $required_twg; IFS=$old_ifs
-    req_major=${1:-0}; req_minor=${2:-0}; req_patch=${3:-0}
-    if [ "$got_major" -gt "$req_major" ] || {
-      [ "$got_major" -eq "$req_major" ] && [ "$got_minor" -gt "$req_minor" ];
-    } || {
-      [ "$got_major" -eq "$req_major" ] && [ "$got_minor" -eq "$req_minor" ] && [ "$got_patch" -ge "$req_patch" ];
-    }; then
-      ok "TWG CLI meets minimum version $required_twg"
-    else
-      fail "TWG CLI is older than minimum $required_twg"
-    fi
+    fail "TWG CLI is older than minimum $required_twg or its version could not be read"
   fi
 
   # Capture all TWG output. This check is intentionally read-only and never

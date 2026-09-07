@@ -112,7 +112,12 @@ alternative.
 - `open-browser` opens the last issue shown in the system browser.
 - `setup` copies the public config template without overwriting an existing
   file. It copies from Herdr's `HERDR_PLUGIN_ROOT`, never from the caller's
-  current directory.
+  current directory, then checks required tools and TWG version/authentication.
+  Rerun it after installing dependencies or completing OAuth.
+- `install-dependencies` opens a terminal that asks for approval before each
+  missing package installation. It can install fzf, jq, and less with an
+  available Homebrew, APT, DNF, or Pacman, and TWG with Atlassian's installer.
+  It skips TWG login and agent-skill installation; complete OAuth yourself.
 - `doctor` performs read-only checks for config, dependencies, private state,
   TWG version/authentication, and the configured Jira Cloud site. It never
   invokes `twg login` or `twg setup`.
@@ -140,8 +145,9 @@ preview; descriptions and comments are rendered as readable text.
 Install `fzf` with `brew install fzf` on macOS or `sudo apt install fzf` on
 Debian/Ubuntu; see its installation guide above for other platforms. The plugin
 uses the executable directly; fzf shell integration is not required. It must
-be on the `PATH` used by Herdr. The plugin does not install system packages.
-If fzf is missing, doctor fails and the peek action reports installation
+be on the `PATH` used by Herdr. Both `fzf` and `twg` are mandatory. You can
+install tools yourself or use the approval-based installation action below.
+If either is missing, doctor fails and the peek action reports installation
 instructions before opening a split.
 
 ## Install and set up
@@ -149,19 +155,29 @@ instructions before opening a split.
 **Release status:** `0.1.0` is unreleased; there are no release tags yet.
 The command below installs the development version from the default branch.
 
-Install the [requirements](#requirements), then install the plugin:
+With Herdr and git installed, install the plugin:
 
 ```sh
 herdr plugin install hilmimuktitama/herdr-jira-peek
 ```
 
-1. Complete [TWG's OAuth setup](https://developer.atlassian.com/cloud/twg-cli/getting-started/installation/)
-   in a terminal. If TWG is installed but needs authentication, run `twg setup`.
-2. Select **Set up Peek for Jira** from Herdr's plugin actions. It creates the
-   config template and prints its path; an existing config is preserved.
-3. Edit that file using the [configuration guide](#configure), then run
+1. Select **Set up Peek for Jira** from Herdr's plugin actions. It creates the
+   config template, preserves existing settings, and checks `fzf`, `jq`, `less`,
+   and TWG >= 1.2.6 with authentication/connectivity. Missing requirements
+   make setup fail with instructions; the config remains available to edit.
+2. If tools are missing, select **Install Peek for Jira dependencies**. Review
+   each proposed installation in its terminal and enter `y` to approve it.
+   Declining installs nothing for that tool. No package manager is installed
+   automatically; unsupported systems receive manual installation guidance.
+   The TWG installer is downloaded from Atlassian and run with `--skip-login`
+   and `--skip-skills`; it may update your shell's PATH.
+3. Complete [TWG's OAuth setup](https://developer.atlassian.com/cloud/twg-cli/getting-started/installation/)
+   yourself with `twg setup` in a terminal. Follow the installer's PATH guidance
+   and ensure the running Herdr process sees it; restart Herdr from an updated
+   shell if necessary. Rerun **Set up Peek for Jira** to check again.
+4. Edit the config using the [configuration guide](#configure), then run
    **Check Peek for Jira** from Herdr's plugin actions.
-4. Once the check succeeds, focus a pane containing an allowed issue key and
+5. Once the check succeeds, focus a pane containing an allowed issue key and
    invoke **Peek for Jira issue from pane**. Add the [keybinding](#keybinding)
    for quicker access.
 
@@ -293,6 +309,7 @@ herdr server reload-config
 
 The other action IDs are
 `jira-peek.open-browser`, `jira-peek.setup`,
+`jira-peek.install-dependencies`,
 `jira-peek.doctor`, and
 `jira-peek.clear-cache`.
 
@@ -347,7 +364,7 @@ terminal scrollback limits can prevent recovery of older output.
 ## Troubleshooting
 
 - **Doctor says config is missing:** select **Set up Peek for Jira**, then edit
-  the copied template. Setup refuses to overwrite an existing file.
+  the copied template. Setup preserves an existing file and rechecks dependencies.
 - **Doctor says TWG is missing, old, or unauthenticated:** install the official
   TWG CLI, then run `twg setup` yourself and rerun the doctor action. Doctor
   never runs setup and never prints auth output.

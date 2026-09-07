@@ -26,6 +26,12 @@ contexts = ["workspace"]
 command = ["sh", "scripts/setup.sh"]
 
 [[actions]]
+id = "install-dependencies"
+title = "Install Peek for Jira dependencies"
+contexts = ["workspace"]
+command = ["sh", "scripts/install-dependencies-action.sh"]
+
+[[actions]]
 id = "doctor"
 title = "Check Peek for Jira"
 contexts = ["workspace"]
@@ -42,3 +48,9 @@ id = "viewer"
 title = "Peek for Jira"
 placement = "split"
 command = ["sh", "scripts/viewer.sh"]
+
+[[panes]]
+id = "dependencies"
+title = "Install Peek for Jira dependencies"
+placement = "split"
+command = ["sh", "scripts/install-dependencies.sh"]

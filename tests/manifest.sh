@@ -23,11 +23,11 @@ grep -Fqx 'id = "jira-peek"' "$MANIFEST" \
 grep -Fqx 'platforms = ["macos", "linux"]' "$MANIFEST" \
   || fail 'manifest platform declarations'
 
-for action in peek open-browser setup doctor clear-cache; do
+for action in peek open-browser setup install-dependencies doctor clear-cache; do
   grep -Fqx "id = \"$action\"" "$MANIFEST" \
     || fail "manifest action $action"
 done
-for script in peek.sh open-browser.sh setup.sh doctor.sh clear-cache.sh viewer.sh; do
+for script in peek.sh open-browser.sh setup.sh install-dependencies-action.sh install-dependencies.sh doctor.sh clear-cache.sh viewer.sh; do
   [ -f "$ROOT/scripts/$script" ] || fail "manifest command target $script exists"
 done
 

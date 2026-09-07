@@ -17,6 +17,10 @@ require_fzf() {
   command -v fzf >/dev/null 2>&1 || die 'fzf is required; install it with brew install fzf (macOS) or your Linux package manager, and make sure it is on the PATH used by Herdr. Then rerun the doctor action.'
 }
 
+require_twg() {
+  command -v "$TWG" >/dev/null 2>&1 || die 'TWG CLI is required; run the setup action for dependency installation instructions, then complete twg setup yourself in a terminal.'
+}
+
 # Public defaults. Authentication belongs to TWG, not this plugin config.
 JIRA_BASE=
 JIRA_SITE=

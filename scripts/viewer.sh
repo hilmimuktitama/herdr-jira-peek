@@ -6,6 +6,7 @@
 set -eu
 . "$(dirname "$0")/common.sh"
 require_fzf
+require_twg
 DIR=$(CDPATH= cd "$(dirname "$0")" && pwd)
 export DIR
 # fzf binds from the private viewer directory; child scripts still need stable
