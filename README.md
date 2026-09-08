@@ -171,13 +171,13 @@ instructions before opening a split.
 
 ## Install and set up
 
-**Latest release:** [0.2.2](https://github.com/hilmimuktitama/herdr-jira-peek/releases/tag/v0.2.2).
+**Latest release:** [0.2.3](https://github.com/hilmimuktitama/herdr-jira-peek/releases/tag/v0.2.3).
 The command below installs the full reviewed commit SHA for this release.
 
 With Herdr and git installed, install the plugin:
 
 ```sh
-herdr plugin install hilmimuktitama/herdr-jira-peek --ref ffc3e13517bf3e9d9ebbd451c4abbcf89c8f03f7
+herdr plugin install hilmimuktitama/herdr-jira-peek --ref 3b103d3226bffad78ebefae2767a232dc414a04a
 ```
 
 1. Select **Set up Peek for Jira** from Herdr's plugin actions. It creates the
