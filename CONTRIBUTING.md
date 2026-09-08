@@ -97,3 +97,16 @@ credentials or issue content and never runs `twg setup`.
   formatting changes.
 
 By contributing, you agree to follow the [Code of Conduct](CODE_OF_CONDUCT.md).
+
+## Navigation performance
+
+Run `python3 tests/benchmark.py` for optional local helper timings with 1, 20,
+and 100 synthetic cached issues. It uses temporary state and never contacts
+Jira. Output includes median and maximum milliseconds over ten warmed samples;
+these measure helper processes, not screen-paint latency. Compare older
+checkouts with `--root /path/to/checkout --legacy-focus`.
+
+The PTY regression also reports the time for an arrow/filter burst to save the
+final selected key. Timing varies with machine load, so CI checks behavior
+rather than a fixed millisecond threshold. Keep configuration parsing, cache
+maintenance, and network access out of synchronous selection and typing callbacks.

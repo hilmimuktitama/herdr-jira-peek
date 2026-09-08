@@ -15,6 +15,8 @@ STATE=$(CDPATH= cd "$STATE" && pwd)
 CONFIG_DIR=$(CDPATH= cd "$CONFIG_DIR" && pwd)
 HANDOFF_STATE_DIR=$(CDPATH= cd "$HANDOFF_STATE_DIR" && pwd)
 export HERDR_PLUGIN_STATE_DIR="$STATE" HERDR_PLUGIN_CONFIG_DIR="$CONFIG_DIR"
+VIEWER_KEY_FILE="$(CDPATH= cd "${KEY_FILE%/*}" && pwd)/${KEY_FILE##*/}"
+export VIEWER_KEY_FILE
 
 viewer_state=$(mktemp -d "$HANDOFF_STATE_DIR/.viewer.$$.XXXXXX") || die 'could not create viewer state'
 viewer_cleanup_early() { rm -rf "$viewer_state"; }
@@ -117,6 +119,10 @@ stop_tree() {
   kill -CONT "$p" 2>/dev/null || true; kill -TERM "$p" 2>/dev/null || true
 }
 viewer_cleanup() {
+  if [ -n "${viewer_feedback_worker:-}" ]; then
+    stop_tree "$viewer_feedback_worker" "$$" || true
+    wait "$viewer_feedback_worker" 2>/dev/null || true
+  fi
   if [ -n "${viewer_workers:-}" ]; then
     stop_tree "$viewer_workers" "$$" || true
     wait "$viewer_workers" 2>/dev/null || true
@@ -191,6 +197,10 @@ else
   sh "$DIR/viewer-rows.sh" snapshot "$rows"
 fi
 export VIEWER_METADATA_MODE
+if [ "$live_fzf" -eq 1 ]; then
+  sh "$DIR/viewer-ui.sh" watch-messages >/dev/null 2>&1 &
+  viewer_feedback_worker=$!
+fi
 input_file=$rows
 
 # Reserve chrome, the compact navigator, and a little breathing room for the
@@ -224,9 +234,9 @@ run_picker_chrome() {
   if [ -n "$footer_args" ]; then
     set -- "$@" --footer "$footer" --footer-border=none
   fi
-  [ -n "${info_arg:-}" ] && set -- "$@" --info-command "$info_arg"
   [ -n "${highlight_arg:-}" ] && set -- "$@" "$highlight_arg" --no-bold
   [ -n "${gutter_arg:-}" ] && set -- "$@" --gutter ' '
+  [ -n "${shell_arg:-}" ] && set -- "$@" --with-shell '/bin/sh -c'
   [ -n "${resize_binding:-}" ] && set -- "$@" --bind "$resize_binding"
   run_picker "$@"
 }
@@ -236,9 +246,9 @@ else
   refresh_binding='ctrl-r:execute-silent(VIEWER_NOTIFY=0 sh "$DIR/viewer-fetch.sh" --refresh {1})+reload(sh "$DIR/viewer-rows.sh")+refresh-preview'
 fi
 footer_args=
-info_arg=
 highlight_arg=
 gutter_arg=
+shell_arg=
 help_binding='f1:transform-header(sh "$DIR/viewer-rows.sh" help)'
 copy_key_binding='ctrl-y:transform-header(sh "$DIR/viewer-ui.sh" copy-key {1})'
 copy_link_binding='ctrl-l:transform-header(sh "$DIR/viewer-ui.sh" copy-link {1})'
@@ -249,9 +259,11 @@ if [ "$modernfooter" -eq 1 ]; then
   copy_link_binding='ctrl-l:transform-footer(sh "$DIR/viewer-ui.sh" copy-link {1})+transform(sh "$DIR/viewer-ui.sh" relayout)'
   open_binding='ctrl-o:transform-footer(sh "$DIR/viewer-ui.sh" open {1})+transform(sh "$DIR/viewer-ui.sh" relayout)'
 fi
-printf '%s\n' "$fzf_help" | grep -q -- '--info-command' && info_arg='printf "%s/%s" "${FZF_MATCH_COUNT:-0}" "${FZF_TOTAL_COUNT:-0}"'
 printf '%s\n' "$fzf_help" | grep -q -- '--highlight-line' && highlight_arg=--highlight-line
 printf '%s\n' "$fzf_help" | grep -q -- '--gutter' && gutter_arg=1
+# All callbacks are POSIX shell. Avoid the user's interactive-shell startup
+# configuration on every selection, keystroke, and preview invocation.
+printf '%s\n' "$fzf_help" | grep -q -- '--with-shell' && shell_arg=1
 if [ "$modernfooter" -eq 1 ]; then
   help_binding='f1:transform(sh "$DIR/viewer-ui.sh" help)'
 fi
@@ -291,7 +303,8 @@ if run_picker_chrome \
    --bind "$load_binding" \
   --bind "$help_binding" \
   --bind 'pgdn:preview-page-down,pgup:preview-page-up,ctrl-d:preview-half-page-down,ctrl-u:preview-half-page-up' \
-  --bind 'focus:change-preview-label( issue )+execute-silent(sh "$DIR/open-browser.sh" --select {1})' \
+  --bind 'focus:transform(sh "$DIR/viewer-ui.sh" focus {1})' \
+  --bind 'change:transform(if [ -s "$VIEWER_STATE_DIR/ui-message" ]; then sh "$DIR/viewer-ui.sh" dismiss-message; fi)' \
   --bind "$close_binding" \
   < "$input_file" > /dev/null 2> "$viewer_state/fzf-stderr"; then
   :
@@ -303,6 +316,11 @@ case "$fzf_status" in
     exit 0
     ;;
   2)
+    if [ -n "${viewer_feedback_worker:-}" ]; then
+      stop_tree "$viewer_feedback_worker" "$$" || true
+      wait "$viewer_feedback_worker" 2>/dev/null || true
+      viewer_feedback_worker=
+    fi
     reason=$(sanitize_fetch_error_file "$viewer_state/fzf-stderr" 2>/dev/null || true)
     [ -n "$reason" ] || reason='fzf startup failed'
     if [ -n "${viewer_workers:-}" ]; then

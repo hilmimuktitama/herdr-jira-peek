@@ -293,7 +293,7 @@ write_fake fzf \
   'printf "%s\n" "$1:${FZF_DEFAULT_OPTS+x}:${FZF_DEFAULT_COMMAND+x}:${FZF_DEFAULT_OPTS_FILE+x}" >> "$FZF_ENV_LOG"' \
   '[ -z "${FZF_DEFAULT_OPTS+x}" ] && [ -z "${FZF_DEFAULT_COMMAND+x}" ] && [ -z "${FZF_DEFAULT_OPTS_FILE+x}" ] || exit 97' \
   'if [ "$1" = --help ]; then' \
-  '  if [ "${FZF_OLD_MODE:-}" = 1 ]; then printf "%s\n" "--header --preview-window --bind"; else printf "%s\n" "--footer --info-command --highlight-line --header --preview-window --bind"; fi' \
+  '  if [ "${FZF_OLD_MODE:-}" = 1 ]; then printf "%s\n" "--header --preview-window --bind"; else printf "%s\n" "--footer --info-command --with-shell --highlight-line --header --preview-window --bind"; fi' \
   '  exit 0' \
   'fi' \
   ': > "$FZF_ARGS_LOG"' \
@@ -842,11 +842,17 @@ pass 'abandoned fetch and viewer work is reaped without touching active work'
 # state that may belong to another version or a user.
 mkdir -p "$ZERO_STATE/cache/nested"
 printf '%s\n' direct > "$ZERO_STATE/cache/direct.tmp"
+printf '%s\n' hidden > "$ZERO_STATE/cache/.hidden"
+printf '%s\n' untouched > "$ZERO_STATE/outside-cache"
+ln -s "$ZERO_STATE/outside-cache" "$ZERO_STATE/cache/link"
 printf '%s\n' nested > "$ZERO_STATE/cache/nested/keep"
 env HERDR_PLUGIN_CONFIG_DIR="$ZERO_CONFIG" HERDR_PLUGIN_STATE_DIR="$ZERO_STATE" \
   sh -c '. "$1/scripts/common.sh"' peek-test "$ROOT" \
   || fail 'flat cache purge invocation'
 [ ! -e "$ZERO_STATE/cache/direct.tmp" ] \
+  && [ ! -e "$ZERO_STATE/cache/.hidden" ] \
+  && [ -L "$ZERO_STATE/cache/link" ] \
+  && [ -s "$ZERO_STATE/outside-cache" ] \
   && [ -e "$ZERO_STATE/cache/nested/keep" ] \
   || fail 'flat cache purge scope'
 pass 'runtime cache purge preserves nested state'
@@ -1100,7 +1106,7 @@ case "$modern_help" in
 esac
 rm -f "$TMP/help-state/ui-help"
 header_default=$(env VIEWER_STATE_DIR="$TMP/help-state" VIEWER_HAS_FOOTER=0 sh "$ROOT/scripts/viewer-rows.sh" header)
-case "$header_default" in *'Enter Read · Ctrl-O Open · F1 Help · Esc Close'*) pass 'compact header uses grouped middle dots' ;; *) fail 'compact header uses grouped middle dots' ;; esac
+case "$header_default" in *'Enter Read · Ctrl-G Rescan · F1 Help · Esc Close'*) pass 'compact header uses grouped middle dots' ;; *) fail 'compact header uses grouped middle dots' ;; esac
 printf '%s\n' 'Refreshing' > "$TMP/help-state/ui-message"
 header_message=$(env VIEWER_STATE_DIR="$TMP/help-state" VIEWER_HAS_FOOTER=0 sh "$ROOT/scripts/viewer-rows.sh" header)
 case "$header_message" in *'Refreshing · F1 Help · Esc Close'*) pass 'ui-message header uses grouped middle dots' ;; *) fail 'ui-message header uses grouped middle dots' ;; esac
@@ -1108,22 +1114,24 @@ for footer_width in 30 50 80; do
   footer=$(env VIEWER_STATE_DIR="$TMP/help-state" FZF_COLUMNS="$footer_width" sh "$ROOT/scripts/viewer-rows.sh" footer)
   case "$footer_width:$footer" in
     30:*'F1 Help · Esc Close') : ;;
-    50:*'Enter Read · Ctrl-O Open · F1 Help · Esc Close') : ;;
-     80:*'Enter Read · Ctrl-O Open · PgUp/PgDn Scroll · F1 Help · Esc Close') : ;;
+    50:*'Enter Read · Ctrl-G Rescan · F1 Help · Esc Close') : ;;
+     80:*'Enter Read · Ctrl-G Rescan · PgUp/PgDn Scroll · F1 Help · Esc Close') : ;;
     *) fail "footer middle-dot layout at width $footer_width" ;;
   esac
 done
 pass 'responsive footer uses grouped middle dots'
-footer_45=$(env VIEWER_STATE_DIR="$TMP/help-state" FZF_COLUMNS=45 sh "$ROOT/scripts/viewer-rows.sh" footer)
-if printf '%s\n' "$footer_45" | awk 'NR == 2 && $0 == "F1 Help · Esc Close" { found=1 } END { exit !found }'; then
-  pass 'footer keeps compact layout at width 45'
+footer_47=$(env VIEWER_STATE_DIR="$TMP/help-state" FZF_COLUMNS=47 sh "$ROOT/scripts/viewer-rows.sh" footer)
+if printf '%s\n' "$footer_47" | awk 'NR == 2 && $0 == "F1 Help · Esc Close" { found=1 } END { exit !found }'; then
+  pass 'footer keeps compact layout at width 47'
 else
-  fail 'footer keeps compact layout at width 45'
+  fail 'footer keeps compact layout at width 47'
 fi
-footer_46=$(env VIEWER_STATE_DIR="$TMP/help-state" FZF_COLUMNS=46 sh "$ROOT/scripts/viewer-rows.sh" footer)
-case "$footer_46" in *'Enter Read · Ctrl-O Open · F1 Help · Esc Close') pass 'footer uses medium layout at width 46' ;; *) fail 'footer uses medium layout at width 46' ;; esac
-awk '$0 == "--footer" { footer=1 } $0 == "--info-command" { info=1 } $0 == "--highlight-line" { highlight=1 } END { exit !(footer && info && highlight) }' "$FZF_ARGS_LOG" \
+footer_48=$(env VIEWER_STATE_DIR="$TMP/help-state" FZF_COLUMNS=48 sh "$ROOT/scripts/viewer-rows.sh" footer)
+case "$footer_48" in *'Enter Read · Ctrl-G Rescan · F1 Help · Esc Close') pass 'footer uses medium layout at width 48' ;; *) fail 'footer uses medium layout at width 48' ;; esac
+awk '$0 == "--footer" { footer=1 } $0 == "--info-command" { unexpected=1 } $0 == "--highlight-line" { highlight=1 } END { exit !(footer && highlight && !unexpected) }' "$FZF_ARGS_LOG" \
   && pass 'modern fzf options are enabled' || fail 'modern fzf options are enabled'
+awk '$0 == "--with-shell" { getline; if ($0 == "/bin/sh -c") found=1 } END { exit !found }' "$FZF_ARGS_LOG" \
+  && pass 'picker callbacks use POSIX shell without user shell startup' || fail 'picker callback shell'
 prompt_arg=$(awk '$0 == "--prompt" { getline; print; exit }' "$FZF_ARGS_LOG")
 [ "$prompt_arg" = 'Filter > ' ] && pass 'picker prompt uses literal Filter >' || fail 'picker prompt uses literal Filter >'
 wide_footer=$(awk '$0 == "--footer" { getline; print; exit }' "$FZF_ARGS_LOG")
@@ -1134,6 +1142,51 @@ if awk '$0 == "--footer" || $0 == "--info-command" || $0 == "--highlight-line" {
 else
   fail 'legacy fzf mode omits modern-only options'
 fi
+# Expiry is evaluated when fzf applies it, so delayed callbacks cannot clear
+# a newer confirmation. Removing feedback must restore the preview budget.
+FEEDBACK_STATE="$TMP/feedback-state"
+mkdir "$FEEDBACK_STATE"
+printf '%s\n' ABC-123 > "$FEEDBACK_STATE/candidates"
+feedback_ui() { env VIEWER_STATE_DIR="$FEEDBACK_STATE" VIEWER_HAS_FOOTER=1 VIEWER_MODERN_FOOTER=1 FZF_COLUMNS=80 FZF_LINES=40 sh "$ROOT/scripts/viewer-ui.sh" "$@"; }
+feedback_layout=$(feedback_ui layout)
+printf '%s\n' 'Opened browser' "$(( $(date +%s) + 60 ))" > "$FEEDBACK_STATE/ui-message"
+feedback_ui layout > "$FEEDBACK_STATE/ui-layout"
+[ -z "$(feedback_ui expire-message)" ] && [ -s "$FEEDBACK_STATE/ui-message" ] \
+  && pass 'delayed expiry preserves newer feedback' || fail 'delayed expiry preserves newer feedback'
+printf '%s\n' 'Opened browser' 1 > "$FEEDBACK_STATE/ui-message"
+feedback_clear=$(feedback_ui expire-message)
+case "$feedback_clear" in
+  *'change-footer[Enter Read · Ctrl-G Rescan'*"change-preview-window($feedback_layout)"*) : ;;
+  *) fail 'expiry restores shortcut guide and preview space' ;;
+esac
+[ ! -e "$FEEDBACK_STATE/ui-message" ] && pass 'expiry clears action feedback' || fail 'expiry clears action feedback'
+[ -z "$(feedback_ui expire-message)" ] && pass 'repeated expiry is harmless' || fail 'repeated expiry is harmless'
+printf '%s\n' 'Could not open browser' "$(( $(date +%s) + 60 ))" > "$FEEDBACK_STATE/ui-message"
+: > "$FEEDBACK_STATE/ui-help"
+feedback_legacy=$(env VIEWER_STATE_DIR="$FEEDBACK_STATE" VIEWER_MODERN_FOOTER=0 sh "$ROOT/scripts/viewer-ui.sh" dismiss-message)
+case "$feedback_legacy" in *'change-header[Up/Down choose'*'Ctrl-O browser'*) pass 'legacy dismissal restores expanded help' ;; *) fail 'legacy dismissal restores expanded help' ;; esac
+[ ! -e "$FEEDBACK_STATE/ui-message" ] || fail 'navigation dismisses feedback before expiry'
+
+# Navigation uses startup-validated viewer state, never the global runtime.
+# A missing config makes accidental full initialization fail this regression.
+NAV_STATE="$TMP/navigation-state"
+mkdir -p "$NAV_STATE/viewer" "$NAV_STATE/source-a" "$NAV_STATE/source-b"
+printf '%s\n' ABC-123 ABC-456 > "$NAV_STATE/viewer/candidates"
+printf '%s\n' ABC-123 > "$NAV_STATE/source-a/key"
+printf '%s\n' ABC-789 > "$NAV_STATE/source-b/key"
+nav_ui() { env HERDR_PLUGIN_CONFIG_DIR="$NAV_STATE/no-config" VIEWER_STATE_DIR="$NAV_STATE/viewer" VIEWER_KEY_FILE="$NAV_STATE/source-a/key" sh "$ROOT/scripts/viewer-ui.sh" focus "$1"; }
+nav_ui ABC-456 >/dev/null || fail 'navigation without global initialization'
+[ "$(cat "$NAV_STATE/source-a/key")" = ABC-456 ] && [ "$(cat "$NAV_STATE/source-b/key")" = ABC-789 ] \
+  && pass 'lightweight navigation preserves source scope' || fail 'lightweight navigation preserves source scope'
+for invalid_key in ABC-999 ../escape '-bad'; do
+  if nav_ui "$invalid_key" >/dev/null 2>&1; then fail 'navigation accepts non-candidate key'; fi
+done
+[ "$(cat "$NAV_STATE/source-a/key")" = ABC-456 ] || fail 'invalid navigation changed selection'
+nav_ui '' >/dev/null || fail 'empty results navigation'
+[ "$(cat "$NAV_STATE/source-a/key")" = ABC-456 ] || fail 'empty results changed last selection'
+env HERDR_PLUGIN_CONFIG_DIR="$NAV_STATE/no-config" VIEWER_STATE_DIR="$NAV_STATE/viewer" sh "$ROOT/scripts/viewer-rows.sh" footer >/dev/null \
+  && pass 'shortcut rendering avoids global initialization' || fail 'shortcut rendering avoids global initialization'
+
 wide_row=$(strip_picker_ansi "$(sed -n '1p' "$FZF_INPUT_LOG")")
 if printf '%s\n' "$wide_row" | awk -F '\t' \
   'NF == 2 && $1 == "ABC-123" && $2 ~ /^ABC-123[[:space:]]+on hold[[:space:]]+Quiet$/'; then

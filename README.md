@@ -127,7 +127,7 @@ alternative.
 - `clear-cache` removes only regular files directly inside this plugin's issue
   cache and preserves other state.
 
-The viewer is a responsive right-side split targeted at the action's source pane. It uses a compact filter prompt, a single result counter, and an essential footer that shortens at narrow widths. F1 expands the header controls without losing the query or selection; in stacked layouts the shortcut bar sits below the list and above the preview divider. Resizing recalculates the preview and restores it when space returns. With a
+The viewer is a responsive right-side split targeted at the action's source pane. It uses a compact filter prompt, a single result counter, and an essential footer that shortens at narrow widths. The quick guide highlights Ctrl-G Rescan for new source output; Ctrl-O remains in F1 Help. F1 expands the header controls without losing the query or selection; in stacked layouts the shortcut bar sits below the list and above the preview divider. Resizing recalculates the preview and restores it when space returns. With a
 tracked viewer live for the current source, invoking `peek` toggles only that
 viewer closed instead of opening a duplicate. Each source terminal can have its
 own Peek, including sources in the same workspace or different workspaces.
@@ -352,6 +352,10 @@ narrow terminals (up to eight navigator rows, or ten at 45 or more terminal
 rows), and uses a right preview only when the terminal is wide and tall enough.
 The footer is used when supported by
 modern fzf; older fzf versions retain the compact header/basic fallback.
+Browser and clipboard confirmations clear after about 3 seconds, and failures
+stay for about 6 seconds, when the live picker connection is available. Changing
+the filter or selected issue dismisses either message immediately; this is also
+how feedback clears on older pickers without the live connection.
 
 The normal picker is stacked in narrow splits and side-by-side only in wide
 ones. `Ctrl-R` refreshes the selected issue's metadata/detail; it does not
@@ -369,7 +373,7 @@ The full-screen reader uses `q` to return to the picker (or basic menu),
 arrows to scroll, and `Space`/`b` for the next/previous page. `PgUp`/`PgDn`
 remain supported; on a MacBook, use `Fn`+Up/Down. Its muted help reads `q back
 · ↑↓ scroll · Space/b page`; the reader also labels the full view **Issue
-details**.
+details**. Short issues start at the top of the pane, with unused space below.
 
 ## Controls: basic mode
 

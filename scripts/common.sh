@@ -187,13 +187,14 @@ cleanup_abandoned_temps \
 # Purge on every invocation, not only when a particular key is requested. This
 # also removes interrupted fetches and makes TTL=0 a true no-durable-cache mode.
 purge_cache() {
-  for cache_file in "$CACHE"/* "$CACHE"/.[!.]* "$CACHE"/..?*; do
-    [ -f "$cache_file" ] && [ ! -L "$cache_file" ] || continue
-    if [ "$CACHE_TTL_MIN" -eq 0 ] \
-      || [ -n "$(find "$cache_file" ! -mmin -"$CACHE_TTL_MIN" -print 2>/dev/null)" ]; then
-      rm -f "$cache_file" || die 'could not purge an issue cache file'
-    fi
-  done
+  # Visit direct entries (including dotfiles), pruning every child directory.
+  # One find replaces a process per cached ticket on every invocation. The
+  # default no-follow behavior preserves symlinks and their targets.
+  if [ "$CACHE_TTL_MIN" -eq 0 ]; then
+    find "$CACHE/." ! -name . -prune -type f -exec rm -f {} +
+  else
+    find "$CACHE/." ! -name . -prune -type f ! -mmin -"$CACHE_TTL_MIN" -exec rm -f {} +
+  fi || die 'could not purge issue cache files'
 }
 purge_cache
 

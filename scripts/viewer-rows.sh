@@ -3,8 +3,7 @@
 # shellcheck source=scripts/common.sh
 # Render the ordered, atomically published picker snapshot.
 set -eu
-. "$(dirname "$0")/common.sh"
-DIR=$(CDPATH= cd "$(dirname "$0")" && pwd)
+DIR=${DIR:-$(CDPATH='' cd "${0%/*}" && pwd)}
 state=${VIEWER_STATE_DIR:?}
 status_line() {
   status_value=$(sed -n '1p' "$state/status" 2>/dev/null || true)
@@ -24,7 +23,7 @@ if [ "${1:-}" = header ]; then
     if [ -s "$state/ui-message" ]; then
        printf '%s \302\267 F1 Help \302\267 Esc Close\n' "$(sed -n '1p' "$state/ui-message")"
     else
-       printf 'Enter Read \302\267 Ctrl-O Open \302\267 F1 Help \302\267 Esc Close\n'
+       printf 'Enter Read \302\267 Ctrl-G Rescan \302\267 F1 Help \302\267 Esc Close\n'
     fi
   fi
   status_line
@@ -38,9 +37,9 @@ if [ "${1:-}" = footer ]; then
   cols=${FZF_COLUMNS:-${COLUMNS:-80}}
   case "$cols" in ''|*[!0-9]*) cols=80;; esac
   [ -s "$state/ui-message" ] && sed -n '1p' "$state/ui-message"
-   if [ "$cols" -lt 46 ]; then printf 'F1 Help \302\267 Esc Close';
-   elif [ "$cols" -lt 70 ]; then printf 'Enter Read \302\267 Ctrl-O Open \302\267 F1 Help \302\267 Esc Close';
-   else printf 'Enter Read \302\267 Ctrl-O Open \302\267 PgUp/PgDn Scroll \302\267 F1 Help \302\267 Esc Close'; fi
+   if [ "$cols" -lt 48 ]; then printf 'F1 Help \302\267 Esc Close';
+   elif [ "$cols" -lt 70 ]; then printf 'Enter Read \302\267 Ctrl-G Rescan \302\267 F1 Help \302\267 Esc Close';
+   else printf 'Enter Read \302\267 Ctrl-G Rescan \302\267 PgUp/PgDn Scroll \302\267 F1 Help \302\267 Esc Close'; fi
   exit 0
 fi
 if [ "${1:-}" = help ]; then
@@ -49,10 +48,12 @@ if [ "${1:-}" = help ]; then
   exit 0
 fi
 if [ "${1:-}" = status ]; then
-  count=$(awk 'NF { n++ } END { print n+0 }' "$CANDIDATES_FILE")
-  status_line "$count"
+  status_line
   exit 0
 fi
+# Chrome reads only viewer-owned UI state. Initialize the full runtime only
+# when building issue rows, never to paint a prompt, header, or shortcut bar.
+. "$DIR/common.sh"
 mkdir -p "$state/failed"
 if [ "${1:-}" = snapshot ]; then out=$2; else out=; fi
 tmp=$(mktemp "$state/.snapshot.XXXXXX") || exit 1

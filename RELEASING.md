@@ -53,6 +53,23 @@ old registration and action bindings. GitHub ownership is unchanged. The
 maintainer uses a GitHub noreply address for future commits from this checkout;
 previous public commit history has not been rewritten.
 
+## Version 0.2.2 release validation — 2026-09-08
+
+- [x] Remove full runtime initialization and cache sweeps from navigation and
+  shortcut callbacks; use the native fzf counter and POSIX callback shell.
+- [x] Initialize cached previews once and sweep expired cache files in one
+  pass, preserving nested files, symlinks, and zero-TTL behavior.
+- [x] Add expiring browser/clipboard feedback, promote Ctrl-G Rescan in the
+  quick guide, and start short issues at the top of the full-screen reader.
+- [x] Pass local shell syntax, manifest contract, ShellCheck 0.11.0, and the
+  complete runtime suite, including real fzf/less/Expect PTY coverage.
+- [x] Measure synthetic 100-ticket helper medians of about 13 ms for selection
+  (previously 400 ms) and 122 ms for cached previews (previously 801 ms).
+  The terminal arrow/filter burst improved from 947 ms to about 200–270 ms.
+  These are local fixture measurements, not live Jira or concurrent-agent tests.
+- [ ] Verify Linux and macOS CI on the release commit.
+- [ ] Publish v0.2.2 and pin README installation to the release commit SHA.
+
 ## Version 0.2.1 release validation — 2026-09-08
 
 - [x] Keep all detected keys searchable while limiting automatic metadata

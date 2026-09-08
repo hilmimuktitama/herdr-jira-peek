@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.2.2 — 2026-09-08
+
+- Make ticket navigation and filtering responsive by removing runtime setup and
+  cache sweeps from selection and shortcut callbacks. Use the native fzf counter
+  and POSIX callback shell, and initialize cached previews only once.
+- Sweep expired cache files in one pass instead of starting a process per ticket.
+- Clear browser and clipboard action feedback automatically in live pickers,
+  restoring preview space. Changing the filter or selected issue also dismisses
+  feedback, including in older pickers.
+- Highlight `Ctrl-G Rescan` in the quick guide for finding issues in new source
+  output. Browser opening remains available with `Ctrl-O` and in F1 Help.
+- Start short issues at the top of the full-screen reader instead of leaving
+  blank space above the content.
+
 ## 0.2.1 — 2026-09-08
 
 - Show quiet opening feedback before scanning the source pane. Show immediate

@@ -6,8 +6,23 @@ SCRIPT_DIR=$(CDPATH='' cd "$(dirname "$0")" && pwd)
 RENDER_JQ="$SCRIPT_DIR/render.jq"
 . "$SCRIPT_DIR/common.sh"
 [ -r "$RENDER_JQ" ] || die 'render.jq is missing or unreadable'
+viewer_preview=0
+if [ "${1:-}" = --viewer-preview ]; then viewer_preview=1; shift; fi
 key=${1:-}
 validate_key "$key" || die 'invalid Jira issue key'
+if [ "$viewer_preview" -eq 1 ] && [ -n "${VIEWER_STATE_DIR:-}" ]; then
+  if [ ! -s "$VIEWER_STATE_DIR/rows/$key" ]; then
+    # Only the initial metadata batch is pending; older keys fetch on demand.
+    if ! awk -v k="$key" -v max="$MAX_CANDIDATES" '$0 == k { found=(NR > max); exit } END { exit !found }' "$CANDIDATES_FILE"; then
+      printf '%s\n' 'Fetching issue...'
+      exit 0
+    fi
+  elif [ -e "$VIEWER_STATE_DIR/failed/$key" ]; then
+    detail=$(fetch_error_detail "$key" 2>/dev/null || printf '%s' 'TWG request failed')
+    printf 'Could not load %s: %s\n' "$key" "$detail"
+    exit 1
+  fi
+fi
 f=
 cleanup() {
   [ -z "$f" ] || fetch_cleanup "$f"
@@ -26,8 +41,6 @@ else
   detail=$(fetch_error_detail "$key" 2>/dev/null || printf '%s' 'TWG request failed')
   die "TWG could not read $key: $detail"
 fi
-canonical_url=$(issue_url "$key") || die 'could not determine the issue URL'
-
 # FZF_PREVIEW_COLUMNS is the useful width when this is a preview. COLUMNS and
 # tput keep direct and less-backed renders readable as well.
 preview=false
@@ -49,6 +62,10 @@ if [ -z "$columns" ] && command -v tput >/dev/null 2>&1; then
   esac
 fi
 [ -n "$columns" ] || columns=80
+canonical_url=
+if [ "$preview" = false ]; then
+  canonical_url=$(issue_url "$key") || die 'could not determine the issue URL'
+fi
 
 # Leave a little room for a preview divider and its padding. A minimum of one
 # keeps the splitter safe even when a very narrow value is supplied by fzf.

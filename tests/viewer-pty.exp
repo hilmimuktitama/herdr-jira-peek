@@ -81,7 +81,7 @@ count=$((count + 1))
 printf "%s\n" "$count" > "$count_file"
 body="PTY body $key version $count"
 i=1
-while [ "$i" -le 60 ]; do body="$body
+while [ "$key" != ABC-17 ] && [ "$i" -le 60 ]; do body="$body
 Preview line $i"; i=$((i + 1)); done
 jq -n --arg key "$key" --arg body "$body" '{key:$key,summary:$key,description:$body,status:{name:"Done"}}'
 }
@@ -161,6 +161,43 @@ proc await_help_state {desired phase} {
   puts stderr "PTY timeout: $phase help state desired=$desired"
   stop_child
   exit 1
+}
+proc await_selected_key {key} {
+  global spawn_id state
+  set timeout 0
+  set deadline [expr {[clock milliseconds] + 10000}]
+  while {[clock milliseconds] < $deadline} {
+    expect {
+      -re "\033\\\[6n" { observe $expect_out(buffer); send -i $spawn_id "\033\[1;1R" }
+      -re {(?s).+} { observe $expect_out(buffer) }
+      eof { puts stderr "PTY EOF: selection burst"; stop_child; exit 1 }
+      timeout {}
+    }
+    set key_file [file join $state sources source-source-terminal key]
+    if {[file exists $key_file] && [string trim [slurp $key_file]] eq $key} { return }
+    after 5
+  }
+  puts stderr "PTY timeout: selection burst"; stop_child; exit 1
+}
+proc await_feedback_clear {phase} {
+  global spawn_id state
+  set timeout 0
+  set deadline [expr {[clock milliseconds] + 9000}]
+  while {[clock milliseconds] < $deadline} {
+    expect {
+      -re "\033\\\[6n" { observe $expect_out(buffer); send -i $spawn_id "\033\[1;1R" }
+      -re {(?s).+} { observe $expect_out(buffer) }
+      eof { puts stderr "PTY EOF: $phase feedback expiry"; stop_child; exit 1 }
+      timeout {}
+    }
+    set dirs [glob -nocomplain -directory $state .viewer.*]
+    if {$dirs ne "" && ![file exists [file join [lindex $dirs 0] ui-message]]} {
+      settle_output "$phase feedback expiry"
+      return
+    }
+    after 25
+  }
+  puts stderr "PTY timeout: $phase feedback did not expire"; stop_child; exit 1
 }
 proc await {phase pattern} {
   global spawn_id state tmp observed_output
@@ -247,6 +284,22 @@ proc settle_output {phase} {
   puts stderr "PTY timeout: $phase output did not settle"; stop_child; exit 1
 }
 
+# A short issue used to print at the bottom of the screen. Require the real
+# pager to move home before its heading, and remain open until q.
+spawn -noecho sh "$root/scripts/viewer-reader.sh" "$root/scripts" ABC-17
+await short-reader-top "\033\\\[HIssue details"
+await short-reader-body {PTY body ABC-17 version 1}
+await short-reader-help {q back · ↑↓ scroll · Space/b page}
+send_key "q"
+expect {
+  eof {}
+  timeout { puts stderr "PTY timeout: short reader close"; stop_child; exit 1 }
+}
+set reader_status [wait -i $spawn_id]
+if {[lindex $reader_status 3] != 0} { puts stderr "short reader exited nonzero: $reader_status"; exit 1 }
+set observed_output {}
+puts "ok - short issue reader starts at the top and waits for q"
+
 spawn -noecho sh "$root/scripts/viewer.sh"
 await header {Filter >}
 await_initial_preview
@@ -272,14 +325,20 @@ exec stty rows 40 columns 100 < $spawn_out(slave,name)
 after 300
 await resize-restored {PTY body ABC-1 version 1}
 settle_output before-filter
-send_key "'ABC-11"
+set navigation_started [clock milliseconds]
+send_key "\033\[B\033\[B\033\[B\033\[A\033\[A'ABC-11"
+await_selected_key ABC-11
+puts "measurement - navigation/filter burst saved final selection in [expr {[clock milliseconds] - $navigation_started}] ms"
 await filtered-preview {PTY body ABC-11 version 1}
+set feedback_base_layout [slurp [file join $viewer_dir ui-layout]]
 send_key "\031"
 await copied-key {Copied key}
 send_key "\014"
 await copied-link {Copied link}
 send_key "\017"
 await opened-browser {Opened browser}
+await_feedback_clear browser-success
+if {[slurp [file join $viewer_dir ui-layout]] ne $feedback_base_layout} { puts stderr "feedback expiry did not restore preview space"; stop_child; exit 1 }
 set f [open $action_failure w]; close $f
 send_key "\031"
 await copy-key-failure {Could not copy key}
@@ -287,6 +346,8 @@ send_key "\014"
 await copy-link-failure {Could not copy link}
 send_key "\017"
 await browser-failure {Could not open browser}
+await_feedback_clear browser-failure
+puts "ok - action success and failure expire without input and restore preview space"
 file delete -force $action_failure
 send_key "\033OP"
 await active-help {PgUp/PgDn or Ctrl-D/U scroll preview}
