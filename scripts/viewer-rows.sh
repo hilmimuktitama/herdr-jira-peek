@@ -9,8 +9,14 @@ state=${VIEWER_STATE_DIR:?}
 status_line() {
   status_value=$(sed -n '1p' "$state/status" 2>/dev/null || true)
   case "$status_value" in *[![:print:]]*) status_value=;; esac
-  if printf '%s\n' "$status_value" | grep -Eq '^Rescanned: [0-9]+ issues$|^(No Jira keys found|Source terminal unavailable|Could not read source terminal); keeping previous [0-9]+$'; then printf '%s\n' "$status_value"; fi
+  if printf '%s\n' "$status_value" | grep -Eq '^Rescanning source pane\.\.\.$|^Rescanned: [0-9]+ issues$|^(No Jira keys found|Source terminal unavailable|Could not read source terminal); keeping previous [0-9]+$'; then printf '%s\n' "$status_value"; fi
 }
+if [ "${1:-}" = rescan-start ]; then
+  status_tmp=$(mktemp "$state/.status.XXXXXX") || exit 1
+  printf '%s\n' 'Rescanning source pane...' > "$status_tmp"
+  mv "$status_tmp" "$state/status"
+  set -- header
+fi
 if [ "${1:-}" = header ]; then
   if [ -e "$state/ui-help" ]; then
      printf 'Up/Down choose \302\267 Type filters\nEnter full issue (q back) \302\267 Esc close\nPgUp/PgDn or Ctrl-D/U scroll preview\nCtrl-O browser \302\267 Ctrl-Y copy key \302\267 Ctrl-L copy link\nCtrl-G rescan \302\267 Ctrl-R refresh \302\267 F1 compact filter\n'
@@ -55,7 +61,6 @@ candidate_count=0
 key_width=$(awk 'length($0) > n { n=length($0) } END { if (n < 7) n=7; print n }' "$CANDIDATES_FILE")
 while IFS= read -r key || [ -n "$key" ]; do
   validate_key "$key" || continue
-  [ "$candidate_count" -lt "$MAX_CANDIDATES" ] || break
   candidate_count=$((candidate_count + 1))
   row=$state/rows/$key
   if [ -s "$row" ]; then
@@ -64,7 +69,9 @@ while IFS= read -r key || [ -n "$key" ]; do
       -v yellow="${VIEWER_YELLOW:-}" -v red="${VIEWER_RED:-}" \
       -v kw="$key_width" 'function clip(s,n) { if (length(s) <= n) return s; if (s ~ /[^ -~]/) return s; return substr(s,1,n-3) "..." } { k=$1; s=clip($2,18); l=tolower($2); c=dim; if (l ~ /^(done|closed|resolved)/) c=green; else if (l ~ /(progress|review|qa|testing)/) c=yellow; else if (l ~ /(block|hold)/) c=red; printf "%s\t%-*s  %s%-18s%s  %s%s\n",k,kw,k,c,s,reset,$3,reset }' "$row"
   else
-    printf '%s\t%-*s  %s%-18s%s\n' "$key" "$key_width" "$key" "${VIEWER_DIM:-}" 'fetching...' "${VIEWER_RESET:-}"
+    placeholder='fetching...'
+    [ "$candidate_count" -le "$MAX_CANDIDATES" ] || placeholder='preview on select'
+    printf '%s\t%-*s  %s%-18s%s\n' "$key" "$key_width" "$key" "${VIEWER_DIM:-}" "$placeholder" "${VIEWER_RESET:-}"
   fi
 done < "$CANDIDATES_FILE" > "$tmp"
 if [ -n "$out" ]; then mv "$tmp" "$out"; else cat "$tmp"; rm -f "$tmp"; fi

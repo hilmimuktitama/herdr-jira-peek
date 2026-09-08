@@ -19,6 +19,8 @@ if ! key=$(key_from_url "$url"); then
   die 'clicked URL is not a configured Jira browse URL'
 fi
 
+action_feedback 'Opening Jira Peek...' 'Preparing the issue preview.'
+
 candidate_tmp=$(mktemp "$HANDOFF_STATE_DIR/.candidates.XXXXXX") || die 'could not create candidate list'
 trap 'rm -f "$candidate_tmp"; lock_release' 0
 trap 'rm -f "$candidate_tmp"; lock_release; exit 1' 1 2 15

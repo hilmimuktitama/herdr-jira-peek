@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.2.1 — 2026-09-08
+
+- Show quiet opening feedback before scanning the source pane. Show immediate
+  rescan progress and keep modern fzf pickers responsive until the scan finishes.
+- Keep every detected issue key searchable, including keys beyond the first 20.
+  `MAX_CANDIDATES` now limits automatic metadata loading only; older issues load
+  their preview when selected. The same behavior applies when rescanning.
+
 ## 0.2.0 — 2026-09-08
 
 First versioned release, including the initial feature set below.

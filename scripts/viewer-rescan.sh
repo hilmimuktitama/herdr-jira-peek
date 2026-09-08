@@ -1,5 +1,5 @@
 #!/bin/sh
-# shellcheck disable=SC1007,SC2329 # Empty state values and exit cleanup are intentional.
+# shellcheck disable=SC1007,SC2016,SC2329 # Empty state, literal fzf callbacks, and exit cleanup are intentional.
 # shellcheck source=scripts/common.sh
 set -eu
 . "$(dirname "$0")/common.sh"
@@ -10,13 +10,29 @@ source_pane_arg=${HERDR_VIEWER_SOURCE_PANE:-}; source_terminal_arg=${HERDR_VIEWE
 write_status() { status_tmp=$(mktemp "$state/.status.XXXXXX") || return 0; printf '%s\n' "$1" >"$status_tmp" && mv "$status_tmp" "$status_file"; rm -f "$status_tmp"; }
 previous=$(wc -l < "$CANDIDATES_FILE" | tr -d ' ')
 case "$previous" in ''|*[!0-9]*) previous=0;; esac
+got=; check=; request_tmp=
+cleanup() {
+  # Always restore the keybinding/header, including early read/setup failures.
+  if [ "$(sed -n '1p' "$status_file" 2>/dev/null || true)" = 'Rescanning source pane...' ]; then
+    write_status "Could not read source terminal; keeping previous $previous"
+  fi
+  rm -f "$got" "$check" "$request_tmp"
+  if [ "${1:-}" = --fzf ]; then
+    # The load binding paints the result after the new rows are ready. Showing
+    # completion before reload finishes can invite a keypress during tracking.
+    printf '%s\n' 'rebind(ctrl-g)+reload(sh "$DIR/viewer-rows.sh")'
+  fi
+}
+rescan_mode=${1:-}
+trap 'cleanup "$rescan_mode"' 0
+trap 'exit 1' 1 2 15
+write_status 'Rescanning source pane...'
+if [ "$rescan_mode" = --notify ]; then
+  action_feedback 'Rescanning Jira Peek...' 'Reading the source pane for issue keys.'
+fi
 validate_pane_id "$source_pane_arg" || { write_status "Source terminal unavailable; keeping previous $previous"; exit 2; }
 validate_terminal_id "$source_terminal_arg" || { write_status "Source terminal unavailable; keeping previous $previous"; exit 2; }
 got=$(mktemp "$state/.rescan-keys.XXXXXX") || exit 1
-check=; request_tmp=
-cleanup() { rm -f "$got" "$check" "$request_tmp"; }
-trap cleanup 0
-trap 'cleanup; trap - 0; exit 1' 1 2 15
 check=$(mktemp "$state/.rescan-pane.XXXXXX") || exit 1
 if ! "$HERDR" pane get "$source_pane_arg" >"$check" 2>/dev/null || ! jq -er --arg t "$source_terminal_arg" '.result.pane.terminal_id == $t' "$check" >/dev/null 2>&1; then
   resolved_source=$(resolve_terminal_pane "$source_terminal_arg" 2>/dev/null || true)

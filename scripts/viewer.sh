@@ -40,14 +40,12 @@ fi
 
 # State can outlive the process that created it. Keep only complete, safe keys.
 clean_candidates=$(mktemp "$viewer_state/.candidates.XXXXXX") || die 'could not create candidate list'
-candidate_count=0
 while IFS= read -r key || [ -n "$key" ]; do
-  if validate_key "$key" && [ "$candidate_count" -lt "$MAX_CANDIDATES" ]; then
+  if validate_key "$key"; then
     duplicate=0
     grep -Fqx "$key" "$clean_candidates" 2>/dev/null && duplicate=1 || true
     if [ "$duplicate" -eq 0 ]; then
       printf '%s\n' "$key" >> "$clean_candidates"
-      candidate_count=$((candidate_count + 1))
     fi
   fi
 done < "$CANDIDATES_FILE"
@@ -85,6 +83,7 @@ basic_menu() {
        r|R) key=$(sed -n "${selected}p" "$CANDIDATES_FILE"); printf 'Refreshing %s...\n' "$key"; rm -f "$CACHE/$key.json"; clear_fetch_error "$key" || true; read_issue;;
        s|S)
          old_key=$(sed -n "${selected}p" "$CANDIDATES_FILE")
+         printf 'Rescanning source pane...\n'
          sh "$DIR/viewer-rescan.sh" >/dev/null 2>&1 || true
          n=$(wc -l < "$CANDIDATES_FILE" | tr -d ' ')
          sh "$DIR/viewer-rows.sh" status
@@ -103,9 +102,9 @@ unset VIEWER_METADATA_MODE VIEWER_COORDINATOR_PID
 # Prepare an initial snapshot, then load a capped metadata batch. Full issue
 # detail is fetched lazily when selected for preview or reading.
 if [ -n "${NO_COLOR:-}" ]; then
-  printf '  loading %s issue(s) from Jira...\n' "$n"
+  printf '  found %s issue(s); loading recent issue details...\n' "$n"
 else
-  printf '\033[2m  loading %s issue(s) from Jira...\033[0m\n' "$n"
+  printf '\033[2m  found %s issue(s); loading recent issue details...\033[0m\n' "$n"
 fi
 unset FZF_API_KEY
 stop_tree() {
@@ -262,6 +261,16 @@ if [ "$modernfooter" -eq 1 ]; then
   load_binding='load:transform-header(sh "$DIR/viewer-rows.sh" header)+transform-prompt(sh "$DIR/viewer-rows.sh" prompt)+refresh-preview+transform(sh "$DIR/viewer-ui.sh" relayout)'
   resize_binding='resize:transform-footer(sh "$DIR/viewer-rows.sh" footer)+transform(sh "$DIR/viewer-ui.sh" relayout)+refresh-preview'
 fi
+# Footer and background transforms both arrived in fzf 0.63. Keep the scan
+# separate from reload so metadata updates cannot cancel an in-flight rescan.
+if [ "$modernfooter" -eq 1 ]; then
+  rescan_binding='ctrl-g:unbind(ctrl-g)+transform-header(sh "$DIR/viewer-rows.sh" rescan-start)+bg-transform(sh "$DIR/viewer-rescan.sh" --fzf)'
+  close_binding='esc:bg-cancel+abort,ctrl-c:bg-cancel+abort,ctrl-q:bg-cancel+abort'
+else
+  # Older fzf blocks during execute-silent; Herdr can still paint its toast.
+  rescan_binding='ctrl-g:execute-silent(sh "$DIR/viewer-rescan.sh" --notify)+reload(sh "$DIR/viewer-rows.sh")'
+  close_binding='esc:abort'
+fi
 fzf_status=0
 # shellcheck disable=SC2016
 if run_picker_chrome \
@@ -278,12 +287,12 @@ if run_picker_chrome \
   --bind "$copy_key_binding" \
   --bind "$copy_link_binding" \
    --bind "$refresh_binding" \
-   --bind 'ctrl-g:execute-silent(sh "$DIR/viewer-rescan.sh")+reload(sh "$DIR/viewer-rows.sh")' \
+   --bind "$rescan_binding" \
    --bind "$load_binding" \
   --bind "$help_binding" \
   --bind 'pgdn:preview-page-down,pgup:preview-page-up,ctrl-d:preview-half-page-down,ctrl-u:preview-half-page-up' \
   --bind 'focus:change-preview-label( issue )+execute-silent(sh "$DIR/open-browser.sh" --select {1})' \
-  --bind 'esc:abort' \
+  --bind "$close_binding" \
   < "$input_file" > /dev/null 2> "$viewer_state/fzf-stderr"; then
   :
 else

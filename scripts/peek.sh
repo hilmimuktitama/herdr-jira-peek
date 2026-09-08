@@ -15,6 +15,8 @@ pid=$(pane_id)
 [ -n "$pid" ] || die 'no pane in context'
 validate_pane_id "$pid" || die 'invalid pane in context'
 
+action_feedback 'Opening Jira Peek...' 'Scanning the source pane for issue keys.'
+
 candidate_tmp=$(mktemp "$HANDOFF_STATE_DIR/.candidates.XXXXXX") || die 'could not create candidate list'
 trap 'rm -f "$candidate_tmp"; lock_release' 0
 trap 'rm -f "$candidate_tmp"; lock_release; exit 1' 1 2 15

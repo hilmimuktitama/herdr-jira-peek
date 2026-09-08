@@ -19,7 +19,8 @@ JIRA_PROJECTS='ABC|DEF'
 # issue cache; picker metadata is temporary either way.
 CACHE_TTL_MIN=10
 
-# Maximum issue candidates handed from the focused pane to the picker.
+# Number of recent issues to preload metadata for (1–100).
+# All detected keys remain searchable; older issues load when previewed.
 MAX_CANDIDATES=20
 
 # Optional: override the scan expression instead of deriving it from JIRA_PROJECTS.

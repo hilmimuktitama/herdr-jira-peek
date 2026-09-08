@@ -6,6 +6,11 @@ set -eu
 key=${1:-}
 validate_key "$key" || exit 1
 if [ -n "${VIEWER_STATE_DIR:-}" ] && [ ! -s "$VIEWER_STATE_DIR/rows/$key" ]; then
+  # Only the initial metadata batch is pending. Older keys are still selectable
+  # and fetch their full preview on demand instead of waiting for an unqueued row.
+  if awk -v k="$key" -v max="$MAX_CANDIDATES" '$0 == k { found=(NR > max); exit } END { exit !found }' "$CANDIDATES_FILE"; then
+    exec sh "$(dirname "$0")/render.sh" "$key"
+  fi
   printf '%s\n' 'Fetching issue...'
 elif [ -n "${VIEWER_STATE_DIR:-}" ] && [ -e "$VIEWER_STATE_DIR/failed/$key" ]; then
   detail=$(fetch_error_detail "$key" 2>/dev/null || printf '%s' 'TWG request failed')

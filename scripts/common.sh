@@ -21,6 +21,12 @@ require_twg() {
   command -v "$TWG" >/dev/null 2>&1 || die 'TWG CLI is required; run the setup action for dependency installation instructions, then complete twg setup yourself in a terminal.'
 }
 
+# Herdr owns the visible toast; action stdout may be captured until exit.
+# Feedback must never prevent the action when notifications are unavailable.
+action_feedback() {
+  "$HERDR" notification show "$1" --body "$2" --sound none >/dev/null 2>&1 || true
+}
+
 # Public defaults. Authentication belongs to TWG, not this plugin config.
 JIRA_BASE=
 JIRA_SITE=
@@ -743,12 +749,12 @@ scan_candidates() (
   [ "$recent_status" -lt 2 ] || exit 2
   if [ -s "$scan_visible" ] || [ -s "$scan_recent" ]; then
     { cat "$scan_visible"; cat "$scan_recent"; } \
-      | awk -v max="$MAX_CANDIDATES" '!seen[$0]++ && count++ < max' >"$scan_tmp"
+      | awk '!seen[$0]++' >"$scan_tmp"
   else
     detection_file="$scan_dir/detection"
     detection_status=0; scan_source "$scan_pane" detection >"$detection_file" || detection_status=$?
     [ "$detection_status" -lt 2 ] || exit 2
-    awk -v max="$MAX_CANDIDATES" '!seen[$0]++ && count++ < max' "$detection_file" >"$scan_tmp"
+    awk '!seen[$0]++' "$detection_file" >"$scan_tmp"
   fi
   if [ -s "$scan_tmp" ]; then cp "$scan_tmp" "$scan_out"; exit 0; else exit 1; fi
 )
@@ -969,7 +975,7 @@ show() {
   open_status=0
   candidate_env=$(while IFS= read -r candidate_key || [ -n "$candidate_key" ]; do
     validate_key "$candidate_key" && printf '%s\n' "$candidate_key"
-  done < "$CANDIDATES_FILE" | awk -v max="$MAX_CANDIDATES" '!seen[$0]++ && n++ < max')
+  done < "$CANDIDATES_FILE" | awk '!seen[$0]++')
   "$HERDR" plugin pane open \
     --plugin "$HERDR_PLUGIN_ID" \
     --entrypoint viewer \

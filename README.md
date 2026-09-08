@@ -108,7 +108,8 @@ alternative.
 
 ## Actions
 
-- `peek` scans visible output first, then recent-unwrapped output, putting the newest actual occurrence first within each source. Candidates are globally de-duplicated and capped; detection output is used only when neither source contains a key.
+- `peek` scans visible output first, then recent-unwrapped output, putting the newest actual occurrence first within each source. All detected keys remain searchable and are globally de-duplicated; detection output is used only when neither source contains a key.
+  A quiet “Opening Jira Peek…” notification appears before the source scan.
 - `open-browser` opens the last issue selected for the focused source or Peek
   viewer in the system browser. A source with no selection reports that nothing
   has been peeked yet.
@@ -264,7 +265,10 @@ allowlist such as `ABC|DEF`; do not broaden it to every project unless you
 accept the privacy and preview-scope consequences. `KEY_RE` may optionally
 override the scan expression, but every detected key must still match
 `JIRA_PROJECTS`; it cannot expand the project allowlist. `MAX_CANDIDATES` must
-be between 1 and 100; 20 is the recommended default.
+be between 1 and 100; 20 is the default metadata preload size, not a limit on
+searchable keys. Older keys show “preview on select” and load their full preview
+when selected. Initially, those rows can be filtered by key only; Ctrl-R loads
+their status and summary into the picker too.
 
 The config contains URL, site, project, candidate, and cache preferences only.
 TWG owns OAuth and credential storage. Never put an API token, password,
@@ -272,8 +276,9 @@ cookie, or other secret in this file. `config.sh` is parsed as data rather than
 executed: use one supported `NAME=value` assignment per line, quoting string
 values and putting comments on their own lines.
 
-The picker first makes one capped, metadata-only request (no descriptions or
-comments):
+The picker first makes one metadata-only request for up to `MAX_CANDIDATES`
+recent keys (no descriptions or comments). It retains every detected key in the
+list, including keys outside that batch:
 
 ```sh
  twg --mode user --api-version v2 --site "$JIRA_SITE" --output json \
@@ -352,7 +357,11 @@ The normal picker is stacked in narrow splits and side-by-side only in wide
 ones. `Ctrl-R` refreshes the selected issue's metadata/detail; it does not
 rescan the source pane. `Ctrl-G` rescans the original source terminal in the
 same viewer, preserving filter and selection when possible. It performs no
-Herdr pane layout operations.
+Herdr pane layout operations. On fzf 0.63 or newer, “Rescanning source pane…”
+appears immediately and the picker stays usable while the scan runs; repeated
+Ctrl-G presses are ignored until it finishes. The message then changes to the
+result or an error. Older fzf versions show a quiet Herdr notification during
+the scan; the basic menu prints the progress message before reading the source.
 
 ## Controls: reader mode
 
@@ -370,7 +379,7 @@ reads the selected issue; enter a number or exact key to select and read it.
 Use `n`/`p` for next/previous, `r` to refresh only the selected issue, `s` to
 rescan the original terminal, and `q` to close. Every command must be followed
 by Enter. Reader `q` returns to the menu. Failed or keyless rescans preserve
-the previous list. Candidate lists remain capped; alternate-screen and
+the previous list. All detected candidates remain searchable; alternate-screen and
 terminal scrollback limits can prevent recovery of older output.
 
 ## Troubleshooting

@@ -1300,7 +1300,7 @@ printf 'q\n' | basic_run >/dev/null 2>&1 || fail 'basic startup baseline'
 basic_startup_calls=$(( $(wc -l < "$TWG_LOG" | tr -d ' ') - basic_before ))
 basic_before=$(wc -l < "$TWG_LOG" | tr -d ' ')
 if ! basic_output=$(printf 's\nq\n' | basic_run 2>&1); then fail 'basic s rescan'; fi
-case "$basic_output" in *'Rescanned: 2 issues'*'Selected ABC-1 (2/2)'*) pass 'basic s rescan reports retained selection' ;; *) fail 'basic s rescan output' ;; esac
+case "$basic_output" in *'Rescanning source pane...'*'Rescanned: 2 issues'*'Selected ABC-1 (2/2)'*) pass 'basic s rescan reports progress and retained selection' ;; *) fail 'basic s rescan output' ;; esac
 [ "$(( $(wc -l < "$TWG_LOG" | tr -d ' ') - basic_before ))" = "$basic_startup_calls" ] || fail 'basic rescan starts no metadata calls'
 [ "$(wc -l < "$VIEWER_MANY_STATE/candidates" | tr -d ' ')" = 11 ] || fail 'basic rescan keeps session candidates isolated'
 pass 'basic s rescan avoids metadata calls'
@@ -1685,6 +1685,7 @@ unset HERDR_SOCKET_PATH
 export HERDR_PLUGIN_CLICKED_URL=
 export HERDR_PANE_ID=focused-pane
 unset HERDR_PLUGIN_CONTEXT_JSON
+: > "$HERDR_LOG"
 run sh "$ROOT/scripts/peek.sh" >/dev/null
 [ "$(sed -n '1p' "$STATE/sources/source-terminal-source/candidates")" = DEF-9 ] || fail 'peek selects newest pane key'
 [ "$(sed -n '1p' "$STATE/sources/source-terminal-source/key")" = DEF-9 ] || fail 'peek saves newest pane key'
@@ -1693,6 +1694,9 @@ case "$(sed -n '$p' "$HERDR_LOG")" in
 pass 'noninteractive peek opens adjacent split' ;;
   *) fail 'noninteractive peek opens adjacent split' ;;
 esac
+awk '/notification show Opening Jira Peek.*--sound none/ { feedback=1 } /pane read/ { read_seen=1; if (!feedback) late=1 } END { exit !(feedback && read_seen && !late) }' "$HERDR_LOG" \
+  || fail 'opening feedback precedes source scan'
+pass 'opening feedback precedes source scan even when notifications are unavailable'
 
 # Source priority, cross-source deduplication, and detection-only fallback.
 SOURCE_CONFIG="$TMP/source-config"; SOURCE_STATE="$TMP/source-state"
@@ -1704,8 +1708,8 @@ export HERDR_DETECTION_TEXT='ABC-123 GHI-7 DEF-9 ABC-123'
 : > "$HERDR_SOURCE_LOG"
 env HERDR_PLUGIN_CONFIG_DIR="$SOURCE_CONFIG" HERDR_PLUGIN_STATE_DIR="$SOURCE_STATE" HERDR_PANE_ID=focused-pane HERDR_SOCKET_PATH= sh "$ROOT/scripts/peek.sh" >/dev/null || fail 'source merge fixture'
 awk 'NR==1&&$0~ /--source visible$/{a=1} NR==2&&$0~ /--source recent-unwrapped$/{b=1} NR==3{bad=1} END{exit !(a&&b&&!bad)}' "$HERDR_SOURCE_LOG" || fail 'detection was not used when sources had keys'
-awk 'NR==1&&$0=="ABC-123"{a=1} NR==2&&$0=="DEF-9"{b=1} NR==3&&$0=="GHI-7"{c=1} END{exit !(a&&b&&c&&NR==3)}' "$SOURCE_STATE/sources/source-terminal-source/candidates" || fail 'visible precedes recent with global dedup and cap'
-pass 'visible precedes recent with global dedup and cap'
+awk 'NR==1&&$0=="ABC-123"{a=1} NR==2&&$0=="DEF-9"{b=1} NR==3&&$0=="GHI-7"{c=1} END{exit !(a&&b&&c&&NR==3)}' "$SOURCE_STATE/sources/source-terminal-source/candidates" || fail 'visible precedes recent with global dedup'
+pass 'visible precedes recent with global dedup'
 # Toggle the first source viewer closed before reusing its state for the
 # independent detection-only scan; approved toggle-first must not rescan.
 env HERDR_PLUGIN_CONFIG_DIR="$SOURCE_CONFIG" HERDR_PLUGIN_STATE_DIR="$SOURCE_STATE" HERDR_PANE_ID=focused-pane HERDR_SOCKET_PATH= \
@@ -1715,12 +1719,12 @@ printf '%s\n' 'JIRA_BASE="https://jira.example.test"' 'JIRA_SITE="jira-example"'
  : > "$HERDR_SOURCE_LOG"
 env HERDR_PLUGIN_CONFIG_DIR="$SOURCE_CONFIG" HERDR_PLUGIN_STATE_DIR="$SOURCE_STATE" HERDR_PANE_ID=focused-pane HERDR_SOCKET_PATH= sh "$ROOT/scripts/peek.sh" >/dev/null || fail 'detection fallback fixture'
 awk 'NR==3&&$0~ /--source detection$/{ok=1} END{exit !ok}' "$HERDR_SOURCE_LOG" || fail 'detection fallback source call'
-awk 'NR==1&&$0=="ABC-123"{a=1} NR==2&&$0=="DEF-9"{b=1} END{exit !(a&&b&&NR==2)}' "$SOURCE_STATE/sources/source-terminal-source/candidates" || fail 'detection fallback is capped'
+awk 'NR==1&&$0=="ABC-123"{a=1} NR==2&&$0=="DEF-9"{b=1} NR==3&&$0=="GHI-7"{c=1} END{exit !(a&&b&&c&&NR==3)}' "$SOURCE_STATE/sources/source-terminal-source/candidates" || fail 'detection fallback retains all keys'
 unset HERDR_VISIBLE_TEXT HERDR_RECENT_TEXT HERDR_DETECTION_TEXT
-pass 'detection fallback is capped and only used when both sources are empty'
+pass 'detection fallback retains all keys and is only used when both sources are empty'
 
 # Candidate order is newest-first (last occurrence wins after de-duplication)
-# and the configured cap is applied after that ordering.
+# regardless of the configured metadata preload size.
 MAX_CONFIG="$TMP/max-config"
 MAX_STATE="$TMP/max-state"
 mkdir -p "$MAX_CONFIG" "$MAX_STATE"
@@ -1734,12 +1738,12 @@ export HERDR_READ_TEXT='ABC-123 DEF-9 GHI-7 ABC-123'
 if ! env HERDR_PLUGIN_CONFIG_DIR="$MAX_CONFIG" HERDR_PLUGIN_STATE_DIR="$MAX_STATE" \
   HERDR_PANE_ID=focused-pane HERDR_SOCKET_PATH= \
   sh "$ROOT/scripts/peek.sh" >/dev/null; then
-  fail 'candidate cap and newest ordering'
+  fail 'complete candidate list and newest ordering'
 fi
-if ! awk 'NR == 1 && $0 == "ABC-123" { first=1 } NR == 2 && $0 == "GHI-7" { second=1 } END { exit !(first && second && NR == 2) }' "$MAX_STATE/sources/source-terminal-source/candidates"; then
-  fail 'candidate cap and newest ordering'
+if ! awk 'NR == 1 && $0 == "ABC-123" { first=1 } NR == 2 && $0 == "GHI-7" { second=1 } NR == 3 && $0 == "DEF-9" { third=1 } END { exit !(first && second && third && NR == 3) }' "$MAX_STATE/sources/source-terminal-source/candidates"; then
+  fail 'complete candidate list and newest ordering'
 fi
-pass 'candidate cap preserves newest-first order'
+pass 'metadata preload size does not truncate newest-first candidates'
 export HERDR_READ_TEXT=
 
 TOO_MANY_CONFIG="$TMP/too-many-config"
@@ -1798,6 +1802,7 @@ run sh "$ROOT/scripts/open-browser.sh" --copy-link ABC-123
 pass 'configured URL fallback'
 
 sh "$ROOT/tests/rescan.sh"
+OVERFLOW_REAL_FZF="$REAL_FZF_PATH" sh "$ROOT/tests/overflow.sh"
 sh "$ROOT/tests/multipane.sh"
 pass 'all runtime tests passed'
 printf 'all tests passed\n'
