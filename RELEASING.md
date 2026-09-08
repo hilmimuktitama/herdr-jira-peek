@@ -5,7 +5,8 @@ Plugin ID: `jira-peek`.
 
 The repository became public on 2026-09-07. Version `0.2.0` was published on
 2026-09-08 as the first versioned release; `0.1.0` was the development baseline.
-This project has no publish automation.
+The latest release is `0.2.1`, published on 2026-09-08. This project has no
+publish automation.
 
 ## Before making the repository public
 
@@ -51,6 +52,26 @@ The plugin now uses the neutral ID `jira-peek`. Existing users must follow
 old registration and action bindings. GitHub ownership is unchanged. The
 maintainer uses a GitHub noreply address for future commits from this checkout;
 previous public commit history has not been rewritten.
+
+## Version 0.2.1 release validation — 2026-09-08
+
+- [x] Keep all detected keys searchable while limiting automatic metadata
+  loading, with regression coverage for an older key in a 105-key pane.
+- [x] Add quiet opening feedback and immediate rescan progress, with real
+  terminal coverage for responsive help, rapid rescans, and cancellation.
+- [x] Pass local shell syntax, manifest contract, ShellCheck 0.11.0, and the
+  complete runtime suite, including real fzf/less/Expect PTY coverage.
+- [x] Verify Linux and macOS CI on release commit
+  `eed721c57ee6330b4ee84086bc631c39e5f462fb`: both jobs passed in
+  [run 34222136518](https://github.com/hilmimuktitama/herdr-jira-peek/actions/runs/34222136518).
+- [x] Publish [v0.2.1](https://github.com/hilmimuktitama/herdr-jira-peek/releases/tag/v0.2.1)
+  from that commit and pin README installation to its full SHA with `--ref`.
+  The subsequent documentation commit records publication; it changes no runtime code.
+
+Regression fixtures use simulated Jira and Herdr services and fictional issue
+content. Existing configuration remains compatible; close and reopen viewers
+after updating. The historical intermittent macOS PTY paging timeout recorded
+below remains an undiagnosed limitation.
 
 ## Version 0.2.0 release validation — 2026-09-08
 
