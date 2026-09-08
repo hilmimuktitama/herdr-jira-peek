@@ -9,6 +9,10 @@ require_fzf
 require_twg
 DIR=$(CDPATH= cd "$(dirname "$0")" && pwd)
 export DIR
+# Snapshot the preference once so resize/help callbacks stay lightweight.
+export VIEWER_PICKER_LAYOUT="$PICKER_LAYOUT"
+picker_layout=reverse
+[ "$PICKER_LAYOUT" = bottom ] && picker_layout=default
 # fzf binds from the private viewer directory; child scripts still need stable
 # absolute state/config paths when the caller supplied relative paths.
 STATE=$(CDPATH= cd "$STATE" && pwd)
@@ -271,7 +275,9 @@ load_binding='load:transform-header(sh "$DIR/viewer-rows.sh" header)+transform-p
 resize_binding=
 if [ "$modernfooter" -eq 1 ]; then
   load_binding='load:transform-header(sh "$DIR/viewer-rows.sh" header)+transform-prompt(sh "$DIR/viewer-rows.sh" prompt)+refresh-preview+transform(sh "$DIR/viewer-ui.sh" relayout)'
-  resize_binding='resize:transform-footer(sh "$DIR/viewer-rows.sh" footer)+transform(sh "$DIR/viewer-ui.sh" relayout)+refresh-preview'
+  # Divider drags can flood fzf's resize queue. Compute chrome off the input
+  # loop, then apply the footer and preview together without shell callbacks.
+  resize_binding='resize:bg-transform(sh "$DIR/viewer-ui.sh" resize)'
 fi
 # Footer and background transforms both arrived in fzf 0.63. Keep the scan
 # separate from reload so metadata updates cannot cancel an in-flight rescan.
@@ -286,7 +292,7 @@ fi
 fzf_status=0
 # shellcheck disable=SC2016
 if run_picker_chrome \
-  --ansi --cycle --layout=reverse --info=inline-right --no-separator --border=none \
+  --ansi --cycle --layout="$picker_layout" --info=inline-right --no-separator --border=none \
   --delimiter '\t' --with-nth 2 \
    --prompt "$prompt" --pointer '>' \
   --header "$header" \

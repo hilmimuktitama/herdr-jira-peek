@@ -33,9 +33,10 @@ JIRA_SITE=
 JIRA_PROJECTS=
 CACHE_TTL_MIN=10
 MAX_CANDIDATES=20
+PICKER_LAYOUT=bottom
 KEY_RE=
 
-# Config is a deliberately small declarative assignment file. Parse the six
+# Config is a deliberately small declarative assignment file. Parse the
 # public settings as data instead of executing config.sh as shell code.
 decode_config_value() {
   config_raw=$(printf '%s\n' "${1:-}" \
@@ -87,6 +88,10 @@ load_config() {
         decode_config_value "${config_line#MAX_CANDIDATES=}" || die 'invalid MAX_CANDIDATES assignment in config.sh'
         MAX_CANDIDATES=$config_value
         ;;
+      PICKER_LAYOUT=*)
+        decode_config_value "${config_line#PICKER_LAYOUT=}" || die 'invalid PICKER_LAYOUT assignment in config.sh'
+        PICKER_LAYOUT=$config_value
+        ;;
       KEY_RE=*)
         decode_config_value "${config_line#KEY_RE=}" || die 'invalid KEY_RE assignment in config.sh'
         KEY_RE=$config_value
@@ -129,6 +134,10 @@ case "${MAX_CANDIDATES:-}" in
 esac
 [ "$MAX_CANDIDATES" -gt 0 ] || die 'MAX_CANDIDATES must be greater than zero'
 [ "$MAX_CANDIDATES" -le 100 ] || die 'MAX_CANDIDATES must not exceed 100'
+case "$PICKER_LAYOUT" in
+  top|bottom) ;;
+  *) die 'PICKER_LAYOUT must be top or bottom' ;;
+esac
 # Check configured regular expressions without making a non-match an error.
 regex_status=0
 printf '\n' | grep -Eq "^(${JIRA_PROJECTS})-[0-9]+$" >/dev/null 2>&1 \

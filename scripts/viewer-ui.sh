@@ -76,7 +76,13 @@ if [ "$kind" = layout ]; then
     footer_lines=1; [ -s "${VIEWER_STATE_DIR:-}/ui-message" ] && footer_lines=2
   fi
   budget=$((rows - nav - 1 - header_lines - status_lines - footer_lines - 1))
-  if [ "$cols" -ge 160 ] && [ "$rows" -ge 20 ]; then
+  if [ "${VIEWER_PICKER_LAYOUT:-bottom}" = bottom ]; then
+    if [ "$budget" -ge 4 ]; then
+      printf 'up,%s,wrap,border-bottom,nohidden' "$budget"
+    else
+      printf 'hidden'
+    fi
+  elif [ "$cols" -ge 160 ] && [ "$rows" -ge 20 ]; then
     printf 'right,62%%,wrap,border-left,nohidden'
   elif [ "$budget" -ge 4 ]; then
     printf 'down,%s,wrap,border-top,nohidden' "$budget"
@@ -85,13 +91,18 @@ if [ "$kind" = layout ]; then
   fi
   exit 0
 fi
+if [ "$kind" = resize ]; then
+  footer=$(sh "$DIR/viewer-rows.sh" footer)
+  relayout=$(sh "$DIR/viewer-ui.sh" relayout)
+  printf 'change-footer[%s]+%s+refresh-preview' "$footer" "$relayout"
+  exit 0
+fi
 if [ "$kind" = relayout ]; then
   layout=$(VIEWER_STATE_DIR="${VIEWER_STATE_DIR:-}" sh "$DIR/viewer-ui.sh" layout)
-  previous=$(sed -n '1p' "${VIEWER_STATE_DIR:-}/ui-layout" 2>/dev/null || true)
-  if [ "$layout" != "$previous" ]; then
-    printf '%s\n' "$layout" > "${VIEWER_STATE_DIR:-}/ui-layout"
-    printf 'change-preview-window(%s)' "$layout"
-  fi
+  # This file records requested layout for diagnostics, not applied fzf state.
+  # Background results can be canceled, so let fzf deduplicate layout changes.
+  printf '%s\n' "$layout" > "${VIEWER_STATE_DIR:-}/ui-layout"
+  printf 'change-preview-window(%s)' "$layout"
   exit 0
 fi
 if [ "$kind" = help ]; then

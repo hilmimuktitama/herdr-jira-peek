@@ -35,6 +35,7 @@ decode_config_value() {
 
 read_config() {
   JIRA_BASE='' JIRA_SITE='' JIRA_PROJECTS='' CACHE_TTL_MIN='' MAX_CANDIDATES='' KEY_RE=''
+  PICKER_LAYOUT=bottom
   while IFS= read -r config_line || [ -n "$config_line" ]; do
     config_line=$(printf '%s\n' "$config_line" | sed 's/^[[:space:]]*//')
     case "$config_line" in
@@ -58,6 +59,10 @@ read_config() {
       MAX_CANDIDATES=*)
         decode_config_value "${config_line#MAX_CANDIDATES=}" || return 1
         MAX_CANDIDATES=$config_value
+        ;;
+      PICKER_LAYOUT=*)
+        decode_config_value "${config_line#PICKER_LAYOUT=}" || return 1
+        PICKER_LAYOUT=$config_value
         ;;
       KEY_RE=*)
         decode_config_value "${config_line#KEY_RE=}" || return 1
@@ -87,6 +92,7 @@ JIRA_PROJECTS=${JIRA_PROJECTS:-}
 CACHE_TTL_MIN=${CACHE_TTL_MIN:-}
 MAX_CANDIDATES=${MAX_CANDIDATES:-}
 KEY_RE=${KEY_RE:-}
+PICKER_LAYOUT=${PICKER_LAYOUT-bottom}
 
 case "$JIRA_BASE" in
   *[[:space:]]*) fail 'JIRA_BASE contains whitespace' ;;
@@ -136,6 +142,11 @@ case "$MAX_CANDIDATES" in
       fail 'MAX_CANDIDATES must not exceed 100'
     fi
     ;;
+esac
+
+case "$PICKER_LAYOUT" in
+  top|bottom) ok "PICKER_LAYOUT is valid ($PICKER_LAYOUT)" ;;
+  *) fail 'PICKER_LAYOUT must be top or bottom' ;;
 esac
 
 check_dir_mode() {

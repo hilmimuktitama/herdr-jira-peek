@@ -6,11 +6,12 @@ See an issue key in a build log, commit message, or agent output? Invoke
 **Peek for Jira** to scan that pane, filter the detected issues, and read the
 selected issue's description and comments in an adjacent split.
 
-![Two-pane workflow: the original terminal on the left shows a fictional commit log containing DEMO issue keys; the adjacent Peek picker on the right shows those same issues and the preview for DEMO-1042.](docs/screenshots/workflow.png)
+![Default bottom-aligned workflow: the fictional source log on the left ends with DEMO-1042; the adjacent picker has that issue selected at the same height near the bottom, with its preview above and the filter below.](docs/screenshots/workflow-bottom.png)
 
-*Your source pane stays visible on the left while Peek opens beside it on the
-right. This offline composition pairs the fictional source log with the actual
-plugin UI; no work session or connected Jira site is captured.*
+*The newest issue and filter sit near the source terminal's current output to
+reduce eye travel. This offline composition pairs a fictional source log with
+captured output from the actual plugin UI; no work session or connected Jira
+site is captured.*
 
 [Quick tour](#quick-tour) ·
 [Install](#install-and-set-up) · [Configure](#configure) ·
@@ -19,7 +20,9 @@ plugin UI; no work session or connected Jira site is captured.*
 ## Quick tour
 
 1. **Find issues in context.** Run the `peek` action while your source pane
-   contains allowed issue keys. The most recent visible occurrences come first.
+   contains allowed issue keys. The most recent visible occurrences have priority;
+   the newest issue is selected at the bottom by default, with older issues above.
+   Set `PICKER_LAYOUT='top'` to use the original reading direction.
 2. **Choose and preview.** Use the arrow keys or type part of a key, status,
    or summary. The preview follows your selection.
 3. **Read more, then return.** Press Enter for the full issue reader and `q`
@@ -35,7 +38,14 @@ plugin UI; no work session or connected Jira site is captured.*
 | Need to act on an issue | Press Ctrl-O to open Jira in your browser |
 
 <details>
-<summary>See the compact picker up close</summary>
+<summary>See the default bottom-aligned picker up close</summary>
+
+![Default picker with DEMO-1042 selected below three older issues, the filter at the bottom, and its description, acceptance criteria, and comment in the preview above.](docs/screenshots/picker-bottom.png)
+
+</details>
+
+<details>
+<summary>See the optional top-aligned picker up close</summary>
 
 ![Compact picker showing four fictional DEMO issues, with DEMO-1042 selected and its description, acceptance criteria, and comments below.](docs/screenshots/picker.png)
 
@@ -44,9 +54,9 @@ plugin UI; no work session or connected Jira site is captured.*
 ### Filter and inspect
 
 Typing `empty` narrows the fictional catalog issues to the matching summary
-and updates the preview:
+and updates the preview. The selected issue and filter remain near the bottom:
 
-![Picker filtered by the word empty, showing DEMO-1038, its description, and one fictional comment.](docs/screenshots/filtered.png)
+![Bottom-aligned picker filtered by empty, with DEMO-1038 selected near the bottom and its description and fictional comment above.](docs/screenshots/filtered-bottom.png)
 
 ### Read the full issue
 
@@ -58,8 +68,10 @@ Press `q` to return to your selection:
 <details>
 <summary>See the wide-terminal layout</summary>
 
-At 160 columns or more with enough height, the picker places the issue list
-beside the preview. Narrower splits stack them vertically.
+In the optional `top` layout, at 160 columns or more with enough height, the
+picker places the issue list beside the preview. Narrower splits stack them
+vertically. The default `bottom` layout keeps the preview above the list at
+every width.
 
 ![Wide picker with four fictional issues on the left and the selected issue preview on the right.](docs/screenshots/wide.png)
 
@@ -127,7 +139,7 @@ alternative.
 - `clear-cache` removes only regular files directly inside this plugin's issue
   cache and preserves other state.
 
-The viewer is a responsive right-side split targeted at the action's source pane. It uses a compact filter prompt, a single result counter, and an essential footer that shortens at narrow widths. The quick guide highlights Ctrl-G Rescan for new source output; Ctrl-O remains in F1 Help. F1 expands the header controls without losing the query or selection; in stacked layouts the shortcut bar sits below the list and above the preview divider. Resizing recalculates the preview and restores it when space returns. With a
+The viewer is a responsive right-side split targeted at the action's source pane. It uses a compact filter prompt, a single result counter, and an essential footer that shortens at narrow widths. The quick guide highlights Ctrl-G Rescan for new source output; Ctrl-O remains in F1 Help. F1 expands the header controls without losing the query or selection. `PICKER_LAYOUT` chooses the original top-aligned list or a bottom-aligned list with the preview above it. Resizing recalculates the preview and restores it when space returns. With a
 tracked viewer live for the current source, invoking `peek` toggles only that
 viewer closed instead of opening a duplicate. Each source terminal can have its
 own Peek, including sources in the same workspace or different workspaces.
@@ -256,6 +268,7 @@ JIRA_SITE='your-site'
 JIRA_PROJECTS='ABC|DEF'
 CACHE_TTL_MIN=10
 MAX_CANDIDATES=20
+PICKER_LAYOUT='bottom'
 ```
 
 Set `JIRA_BASE` to a bare HTTPS origin with no context path, trailing slash,
@@ -270,7 +283,30 @@ searchable keys. Older keys show “preview on select” and load their full pre
 when selected. Initially, those rows can be filtered by key only; Ctrl-R loads
 their status and summary into the picker too.
 
-The config contains URL, site, project, candidate, and cache preferences only.
+Choose a reading layout by setting `PICKER_LAYOUT` in the installed `config.sh`:
+
+| Value | Reading behavior |
+| --- | --- |
+| `bottom` (default) | Newest issue at the bottom, older issues above; filter near the bottom and preview above the list at every width. Up moves toward older issues; Down moves toward newer ones when the filter is empty. |
+| `top` | Newest issue at the top, older issues below; preview below the list or beside it in wide panes. |
+
+Bottom alignment is the default to reduce eye travel from the source terminal's
+current output. To restore the original top-aligned experience, use:
+
+```sh
+PICKER_LAYOUT='top'
+```
+
+Find your configuration directory with `herdr plugin config-dir jira-peek`.
+Close and reopen Peek after changing the setting. Existing configurations that
+omit it use `bottom`; an explicit `top` choice is preserved. Setup preserves
+existing configuration files. Both layouts keep the same recency priority,
+metadata preload order, search matching, and
+selection tracking across rescans. If the pane is too short, the preview hides
+to leave room for choosing issues and returns when space is available. The
+numbered fallback menu keeps its existing text layout.
+
+The config contains URL, site, project, candidate, cache, and layout preferences only.
 TWG owns OAuth and credential storage. Never put an API token, password,
 cookie, or other secret in this file. `config.sh` is parsed as data rather than
 executed: use one supported `NAME=value` assignment per line, quoting string

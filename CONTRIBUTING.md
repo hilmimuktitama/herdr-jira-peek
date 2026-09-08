@@ -8,6 +8,17 @@ Atlassian trademarks. Contributions are accepted under the repository's MIT
 license; by submitting a contribution, you grant the project permission to
 distribute it under those same MIT terms.
 
+## Public examples and screenshots
+
+Use entirely fictional data in documentation, fixtures, demos, and screenshots.
+Never commit or push real Jira or company data, customer information, private
+identities, tenant URLs, terminal output, caches, logs, or credentials. Renaming
+or blurring real records does not make them suitable examples.
+
+Use the [offline screenshot capture](docs/screenshots/README.md) instead of a
+live work session. Before publishing, inspect the diff, visually review new
+images, and check image metadata for private information.
+
 ## Prerequisites
 
 - [Herdr](https://herdr.dev/docs/install/) >= 0.8.2 for linking and manual use

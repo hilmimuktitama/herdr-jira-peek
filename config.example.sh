@@ -23,6 +23,11 @@ CACHE_TTL_MIN=10
 # All detected keys remain searchable; older issues load when previewed.
 MAX_CANDIDATES=20
 
+# Picker reading direction: 'bottom' (default) places the newest issue and
+# filter at the bottom, with preview above. 'top' keeps the original view.
+# Reopen the Peek pane after changing this setting.
+PICKER_LAYOUT='bottom'
+
 # Optional: override the scan expression instead of deriving it from JIRA_PROJECTS.
 # Detected keys must still match JIRA_PROJECTS; this cannot expand the allowlist.
 # KEY_RE='(ABC|DEF)-[0-9]+'

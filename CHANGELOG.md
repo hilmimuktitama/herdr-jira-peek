@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.2.3 — 2026-09-08
+
+- Add `PICKER_LAYOUT='top'|'bottom'` configuration. Default to bottom alignment
+  to reduce eye travel, with the newest issue and filter near the terminal
+  prompt, with older issues above and the preview above the list at every width.
+  Keep `top` available as an explicit choice. Validate the setting in the
+  runtime and doctor, and apply changes on reopening.
+- Keep the picker responsive during continuous pane resizing by calculating
+  resize layout changes in the background. Restore issue content when the pane
+  grows again and keep Esc usable in small panes.
+- Update the README with the bottom-aligned experience and reproducible
+  screenshots using entirely fictional, isolated fixtures. Document the public
+  repository's fictional-data requirement for examples, tests, and screenshots.
+
 ## 0.2.2 — 2026-09-08
 
 - Make ticket navigation and filtering responsive by removing runtime setup and

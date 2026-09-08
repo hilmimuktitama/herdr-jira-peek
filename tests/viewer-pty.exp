@@ -1,10 +1,13 @@
 #!/usr/bin/expect -f
 
-if {$argc != 4} { puts stderr "usage: viewer-pty.exp ROOT TMP REAL_FZF REAL_LESS"; exit 2 }
+if {$argc < 4 || $argc > 5} { puts stderr "usage: viewer-pty.exp ROOT TMP REAL_FZF REAL_LESS ?top|bottom?"; exit 2 }
 set root [lindex $argv 0]
 set tmp [lindex $argv 1]
 set real_fzf [lindex $argv 2]
 set real_less [lindex $argv 3]
+set picker_layout bottom
+if {$argc == 5} { set picker_layout [lindex $argv 4] }
+if {$picker_layout ni {top bottom}} { puts stderr "invalid picker layout"; exit 2 }
 set state [file join $tmp "pty-state-abcdefghijklmnopqrstuvwxyz-abcdefghijklmnopqrstuvwxyz-abcdefghijklmnopqrstuvwxyz-abcdefghijklmnop"]
 set config [file join $tmp pty-config]
 set bin [file join $tmp pty-bin]
@@ -30,6 +33,7 @@ puts $f {JIRA_SITE="jira-example"}
 puts $f {JIRA_PROJECTS="ABC"}
 puts $f {CACHE_TTL_MIN=10}
 puts $f {MAX_CANDIDATES=20}
+puts $f "PICKER_LAYOUT='$picker_layout'"
 close $f
 set f [open [file join $source visible] w]; puts $f "ABC-1 DEF-2 ABC-3"; close $f
 set f [open [file join $source recent-unwrapped] w]; puts $f "ABC-1"; close $f
@@ -303,6 +307,14 @@ puts "ok - short issue reader starts at the top and waits for q"
 spawn -noecho sh "$root/scripts/viewer.sh"
 await header {Filter >}
 await_initial_preview
+settle_output before-layout-navigation
+if {$picker_layout eq "bottom"} { send_key "\033\[A" } else { send_key "\033\[B" }
+await_selected_key ABC-2
+await layout-older-issue {PTY body ABC-2 version 1}
+if {$picker_layout eq "bottom"} { send_key "\033\[B" } else { send_key "\033\[A" }
+await_selected_key ABC-1
+await layout-newest-issue {PTY body ABC-1 version 1}
+puts "ok - $picker_layout layout selects newest first and navigates in visual order"
 settle_output before-preview-page-down
 send_key "\033\[6~"
 await preview-page-down {Preview line 40}
@@ -316,14 +328,33 @@ send_key "\033OP"
 await help-closed {PTY body ABC-1 version 1}
 set viewer_dir [lindex [glob -nocomplain -directory $state .viewer.*] 0]
 await_help_state 0 initial-help-closed
+foreach dimensions {{20 170} {10 55} {5 20} {2 5} {1 1} {40 55} {40 20} {40 5} {40 1}} {
+  lassign $dimensions rows cols
+  set observed_output {}
+  exec stty rows $rows columns $cols < $spawn_out(slave,name)
+  settle_output "resize-small-$rows-$cols"
+  # Discard earlier paints: only output after growing proves recovery.
+  set observed_output {}
+  exec stty rows 40 columns 100 < $spawn_out(slave,name)
+  await "resize-restored-$rows-$cols" {PTY body ABC-1 version 1}
+  settle_output "resize-restored-$rows-$cols"
+}
+# A dragged divider produces a burst of resizes while callbacks are running.
 set observed_output {}
-exec stty rows 20 columns 170 < $spawn_out(slave,name)
-after 300
-exec stty rows 10 columns 55 < $spawn_out(slave,name)
-after 300
+exec sh -c {
+  i=0
+  while [ "$i" -lt 180 ]; do
+    stty rows 40 columns "$((50 + i % 50))" < "$1"
+    i=$((i + 1))
+  done
+  printf '\nRESIZE-BURST-DONE\n' > "$1"
+} sh $spawn_out(slave,name) &
+await resize-burst-done {RESIZE-BURST-DONE}
+settle_output resize-burst
+set observed_output {}
 exec stty rows 40 columns 100 < $spawn_out(slave,name)
-after 300
-await resize-restored {PTY body ABC-1 version 1}
+await resize-burst-restored {PTY body ABC-1 version 1}
+puts "ok - narrow/short pane recovery and continuous divider resize"
 settle_output before-filter
 set navigation_started [clock milliseconds]
 send_key "\033\[B\033\[B\033\[B\033\[A\033\[A'ABC-11"
@@ -465,6 +496,8 @@ await close-during-scan-ready {PTY body ABC-1 version}
 settle_output before-close-during-scan
 send_key "\007"
 await close-during-scan-feedback {Rescanning source pane...}
+exec stty rows 10 columns 30 < $spawn_out(slave,name)
+settle_output close-during-scan-small-pane
 send_key "\033"
 expect {
   -re "\033\\\[6n" { send -i $spawn_id "\033\[1;1R"; exp_continue }
@@ -475,5 +508,5 @@ set scan_close_status [wait -i $spawn_id]
 if {[lindex $scan_close_status 3] != 0} { puts stderr "close during rescan exited nonzero: $scan_close_status"; exit 1 }
 if {[glob -nocomplain -directory $state .viewer.*] ne ""} { puts stderr "rescan viewer directories remain"; exit 1 }
 file delete -force [file join $source scan-gate]
-puts "ok - immediate rescan feedback, responsive help, and Escape during a slow scan"
-puts "ok - real PTY rescan/filter/reader/refresh/coalescing/close"
+puts "ok - immediate rescan feedback, responsive help, and Escape in a small pane during a slow scan"
+puts "ok - $picker_layout real PTY rescan/filter/reader/refresh/coalescing/close"

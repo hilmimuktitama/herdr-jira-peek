@@ -68,6 +68,10 @@ case "$doctor_output" in
   *) fail 'doctor diagnostics' ;;
 esac
 case "$doctor_output" in
+  *'OK   PICKER_LAYOUT is valid (bottom)'*) pass 'doctor defaults to bottom layout' ;;
+  *) fail 'doctor default picker layout' ;;
+esac
+case "$doctor_output" in
   *jira-example*|*jira.example.test*|*TWG\ response*|*\{*) fail 'doctor does not leak config or response data' ;;
 esac
 
@@ -1073,7 +1077,7 @@ awk 'NR == 1 && $0 == "Issue details" { found=1 } END { exit !found }' "$LESS_IN
 printf '%s\n' ABC-123 > "$STATE/candidates"
 export FZF_DEFAULT_OPTS='--no-such-option'; export FZF_DEFAULT_COMMAND='bad'; export FZF_DEFAULT_OPTS_FILE='bad'
 : > "$FZF_ENV_LOG"
-if ! run env COLUMNS=180 sh "$ROOT/scripts/viewer.sh" >/dev/null; then
+if ! run env COLUMNS=180 LINES=40 sh "$ROOT/scripts/viewer.sh" >/dev/null; then
   fail 'wide viewer launch'
 fi
 if awk 'NR==1&&$0=="--help:::"{a=1} NR==2&&$0=="--ansi:::"{b=1} END{exit !(a&&b&&NR==2)}' "$FZF_ENV_LOG"; then
@@ -1083,9 +1087,9 @@ else
 fi
 unset FZF_DEFAULT_OPTS FZF_DEFAULT_COMMAND FZF_DEFAULT_OPTS_FILE
 wide_preview=$(awk '$0 == "--preview-window" { getline; print; exit }' "$FZF_ARGS_LOG")
-[ "$wide_preview" = 'right,62%,wrap,border-left,nohidden' ] \
-  && pass 'wide terminals use a right preview' \
-  || fail 'wide terminals use a right preview'
+[ "$wide_preview" = 'up,36,wrap,border-bottom,nohidden' ] \
+  && pass 'wide terminals default to a preview above the list' \
+  || fail 'wide terminals default to a preview above the list'
 if awk '$0 == "--border=none" { found=1 } END { exit !found }' "$FZF_ARGS_LOG"; then
   pass 'viewer leaves the outer pane frame to Herdr'
 else
@@ -1149,6 +1153,17 @@ mkdir "$FEEDBACK_STATE"
 printf '%s\n' ABC-123 > "$FEEDBACK_STATE/candidates"
 feedback_ui() { env VIEWER_STATE_DIR="$FEEDBACK_STATE" VIEWER_HAS_FOOTER=1 VIEWER_MODERN_FOOTER=1 FZF_COLUMNS=80 FZF_LINES=40 sh "$ROOT/scripts/viewer-ui.sh" "$@"; }
 feedback_layout=$(feedback_ui layout)
+feedback_resize=$(feedback_ui resize)
+case "$feedback_resize" in
+  *"change-preview-window($feedback_layout)+refresh-preview") : ;;
+  *) fail 'resize emits a complete preview layout' ;;
+esac
+case "$feedback_resize" in
+  *'transform('*|*'execute('*|*'transform-footer('*) fail 'resize result blocks on another shell callback' ;;
+esac
+[ "$(feedback_ui relayout)" = "change-preview-window($feedback_layout)" ] \
+  && pass 'relayout reapplies a layout even if an earlier background result was canceled' \
+  || fail 'relayout skips an unapplied background layout'
 printf '%s\n' 'Opened browser' "$(( $(date +%s) + 60 ))" > "$FEEDBACK_STATE/ui-message"
 feedback_ui layout > "$FEEDBACK_STATE/ui-layout"
 [ -z "$(feedback_ui expire-message)" ] && [ -s "$FEEDBACK_STATE/ui-message" ] \
@@ -1198,9 +1213,50 @@ if ! run env COLUMNS=99 LINES=40 sh "$ROOT/scripts/viewer.sh" >/dev/null; then
   fail 'narrow viewer launch'
 fi
 narrow_preview=$(awk '$0 == "--preview-window" { getline; print; exit }' "$FZF_ARGS_LOG")
-[ "$narrow_preview" = 'down,36,wrap,border-top,nohidden' ] \
-  && pass 'narrow terminals use a down preview' \
-  || fail 'narrow terminals use a down preview'
+[ "$narrow_preview" = 'up,36,wrap,border-bottom,nohidden' ] \
+  && pass 'narrow terminals default to a preview above the list' \
+  || fail 'narrow terminals default to a preview above the list'
+# Configuration defaults to bottom and changes only presentation,
+# so metadata priority and the initially selected newest issue remain intact.
+grep -Fqx -- '--layout=default' "$FZF_ARGS_LOG" || fail 'missing layout setting uses bottom mode'
+LAYOUT_CONFIG="$TMP/layout-config"
+mkdir "$LAYOUT_CONFIG"
+for layout_preference in top bottom; do
+  cp "$CONFIG/config.sh" "$LAYOUT_CONFIG/config.sh"
+  printf "PICKER_LAYOUT='%s'\n" "$layout_preference" >> "$LAYOUT_CONFIG/config.sh"
+  for layout_width in 99 180; do
+    run_with_state "$LAYOUT_CONFIG" "$STATE" env COLUMNS="$layout_width" LINES=40 \
+      sh "$ROOT/scripts/viewer.sh" >/dev/null || fail "$layout_preference viewer launch"
+    layout_preview=$(awk '$0 == "--preview-window" { getline; print; exit }' "$FZF_ARGS_LOG")
+    case "$layout_preference:$layout_width:$layout_preview" in
+      top:99:down,36,wrap,border-top,nohidden|top:180:right,62%,wrap,border-left,nohidden|bottom:*:up,36,wrap,border-bottom,nohidden) : ;;
+      *) fail "$layout_preference preview at width $layout_width" ;;
+    esac
+    expected_layout=reverse; [ "$layout_preference" = bottom ] && expected_layout=default
+    grep -Fqx -- "--layout=$expected_layout" "$FZF_ARGS_LOG" || fail "$layout_preference fzf orientation"
+    [ "$(cut -f1 "$FZF_INPUT_LOG" | head -1)" = ABC-123 ] || fail 'layout changes newest issue priority'
+  done
+  # Doctor uses a separate read-only parser; it must agree with the runtime.
+  layout_doctor=$(run_with_state "$LAYOUT_CONFIG" "$STATE" sh "$ROOT/scripts/doctor.sh" 2>&1 || true)
+  case "$layout_doctor" in *"OK   PICKER_LAYOUT is valid ($layout_preference)"*) : ;; *) fail "$layout_preference doctor validation";; esac
+  pass "$layout_preference layout configuration, responsive preview, and doctor"
+done
+for invalid_layout in '' newest BOTTOM; do
+  cp "$CONFIG/config.sh" "$LAYOUT_CONFIG/config.sh"
+  printf "PICKER_LAYOUT='%s'\n" "$invalid_layout" >> "$LAYOUT_CONFIG/config.sh"
+  if layout_error=$(run_with_state "$LAYOUT_CONFIG" "$STATE" sh "$ROOT/scripts/viewer.sh" 2>&1); then
+    fail 'invalid picker layout accepted'
+  fi
+  case "$layout_error" in *'PICKER_LAYOUT must be top or bottom'*) : ;; *) fail 'picker layout diagnostic';; esac
+  layout_doctor=$(run_with_state "$LAYOUT_CONFIG" "$STATE" sh "$ROOT/scripts/doctor.sh" 2>&1 || true)
+  case "$layout_doctor" in *'FAIL PICKER_LAYOUT must be top or bottom'*) : ;; *) fail 'doctor rejects invalid picker layout';; esac
+done
+pass 'runtime and doctor reject empty and unknown picker layouts'
+for layout_preference in top bottom; do
+  small_layout=$(env VIEWER_PICKER_LAYOUT="$layout_preference" VIEWER_HAS_FOOTER=1 FZF_COLUMNS=30 FZF_LINES=10 \
+    sh "$ROOT/scripts/viewer-ui.sh" layout 11)
+  [ "$small_layout" = hidden ] || fail "$layout_preference hides preview in a small pane"
+done
 if ! run env NO_COLOR=1 COLUMNS=120 sh "$ROOT/scripts/viewer.sh" >/dev/null; then
   fail 'NO_COLOR viewer launch'
 fi
@@ -1378,7 +1434,10 @@ many_output=$(many_run sh "$ROOT/scripts/viewer.sh" </dev/null) || fail 'menu EO
 pass 'menu EOF terminates'
 
 if [ -n "$REAL_FZF_PATH" ] && [ -n "$REAL_LESS_PATH" ] && [ -x "$(command -v expect 2>/dev/null || true)" ]; then
-  expect "$ROOT/tests/viewer-pty.exp" "$ROOT" "$TMP" "$REAL_FZF_PATH" "$REAL_LESS_PATH" || fail 'viewer PTY regression'
+  for layout_preference in top bottom; do
+    mkdir "$TMP/pty-$layout_preference"
+    expect "$ROOT/tests/viewer-pty.exp" "$ROOT" "$TMP/pty-$layout_preference" "$REAL_FZF_PATH" "$REAL_LESS_PATH" "$layout_preference" || fail "$layout_preference viewer PTY regression"
+  done
 else
   pass 'viewer PTY regression skipped (fzf or expect unavailable)'
 fi
