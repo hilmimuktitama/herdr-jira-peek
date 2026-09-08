@@ -6,6 +6,13 @@ set -eu
 
 mode=open
 if [ "$#" -eq 0 ]; then
+  # Explicit viewer callbacks inherit their source; workspace actions resolve
+  # the focused source/viewer instead of using another agent's last selection.
+  if [ -z "${HERDR_VIEWER_SOURCE_TERMINAL:-}" ]; then
+    lock_acquire
+    resolve_action_source
+    lock_release
+  fi
   [ -s "$KEY_FILE" ] || die 'nothing peeked yet'
   key=$(sed -n '1p' "$KEY_FILE")
 elif [ "$#" -eq 2 ]; then

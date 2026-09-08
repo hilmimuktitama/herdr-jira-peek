@@ -3,9 +3,9 @@
 Canonical repository: [hilmimuktitama/herdr-jira-peek](https://github.com/hilmimuktitama/herdr-jira-peek).
 Plugin ID: `jira-peek`.
 
-The repository became public on 2026-09-07. `0.1.0` remains unreleased, with
-no tags or releases. Making the source public and publishing a versioned
-release are separate steps. This project has no publish automation.
+The repository became public on 2026-09-07. Version `0.2.0` is prepared as the
+first versioned release; `0.1.0` was the development baseline. This project has
+no publish automation.
 
 ## Before making the repository public
 
@@ -52,18 +52,23 @@ old registration and action bindings. GitHub ownership is unchanged. The
 maintainer uses a GitHub noreply address for future commits from this checkout;
 previous public commit history has not been rewritten.
 
-## Before publishing a versioned release
+## Version 0.2.0 release validation — 2026-09-08
 
-- [ ] Select the release commit and version, update the manifest and changelog,
-  and review the final release notes.
-- [ ] Confirm checks for the selected release commit using
-  [CONTRIBUTING.md](CONTRIBUTING.md#checks). Keep any known limitations explicit.
-- [ ] Resolve or explicitly document the intermittent macOS PTY paging timeout
-  described in the historical record below.
-- [ ] Publish the tag and release from the canonical repository, then update
-  README's release status and installation command to use the full reviewed
-  commit SHA with `--ref`. Keep the human-readable version/tag in the release
-  notes; a full commit SHA identifies the immutable source revision.
+- [x] Set the manifest version and changelog to `0.2.0`, including independent
+  viewers per source terminal, source-scoped selection, and upgrade handling.
+- [x] Pass local shell syntax, manifest contract, and ShellCheck 0.11.0 checks.
+- [x] Pass the full runtime suite, including real fzf/less/Expect PTY coverage
+  and the new multi-pane lifecycle, ownership, movement, failure, concurrency,
+  and legacy-upgrade regressions. Expect required execution outside the local
+  sandbox to create its PTY; the sandboxed attempt could not run that check.
+- [x] Explicitly retain the historical intermittent macOS PTY paging timeout
+  as an undiagnosed limitation. This run passed; it does not establish a fix.
+- [ ] Verify Linux and macOS CI on the selected release commit.
+- [ ] Publish the tag and release, then pin README installation to the full
+  reviewed commit SHA with `--ref`.
+
+No live Jira site or existing user Herdr panes were used for this release's
+validation. Lifecycle tests use simulated Herdr responses and fictional keys.
 
 ## Review evidence — 2026-09-07
 

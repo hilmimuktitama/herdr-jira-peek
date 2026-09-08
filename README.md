@@ -24,7 +24,7 @@ plugin UI; no work session or connected Jira site is captured.*
    or summary. The preview follows your selection.
 3. **Read more, then return.** Press Enter for the full issue reader and `q`
    to return to the picker. Esc closes the picker. Invoke `peek` again while
-   its tracked viewer is open to toggle it closed.
+   that source's viewer is open to toggle only that viewer closed.
 
 | While you work | Peek helps you |
 | --- | --- |
@@ -94,8 +94,8 @@ alternative.
   Herdr's private plugin state; expired entries are deleted at runtime startup.
   Set `CACHE_TTL_MIN=0` to disable durable issue caching, or use `clear-cache`
   to remove the cached issue files.
-- The last selected key, initial candidate list, and state filenames containing
-  issue keys can remain after the viewer closes. Neither `clear-cache` nor
+- Each source terminal's last selected key, initial candidate list, and state
+  filenames containing issue keys can remain after the viewer closes. Neither `clear-cache` nor
   `CACHE_TTL_MIN=0` removes all plugin state.
 - Normal exits and handled signals clean temporary request and scan data.
   Recovery after a forced termination is partial: some abandoned files can
@@ -109,7 +109,9 @@ alternative.
 ## Actions
 
 - `peek` scans visible output first, then recent-unwrapped output, putting the newest actual occurrence first within each source. Candidates are globally de-duplicated and capped; detection output is used only when neither source contains a key.
-- `open-browser` opens the last issue shown in the system browser.
+- `open-browser` opens the last issue selected for the focused source or Peek
+  viewer in the system browser. A source with no selection reports that nothing
+  has been peeked yet.
 - `setup` copies the public config template without overwriting an existing
   file. It copies from Herdr's `HERDR_PLUGIN_ROOT`, never from the caller's
   current directory, then checks required tools and TWG version/authentication.
@@ -125,9 +127,13 @@ alternative.
   cache and preserves other state.
 
 The viewer is a responsive right-side split targeted at the action's source pane. It uses a compact filter prompt, a single result counter, and an essential footer that shortens at narrow widths. F1 expands the header controls without losing the query or selection; in stacked layouts the shortcut bar sits below the list and above the preview divider. Resizing recalculates the preview and restores it when space returns. With a
-tracked viewer live, invoking `peek` toggles it closed instead of opening a
-duplicate. The picker shows key, status, summary, and the formatted issue
-preview; descriptions and comments are rendered as readable text.
+tracked viewer live for the current source, invoking `peek` toggles only that
+viewer closed instead of opening a duplicate. Each source terminal can have its
+own Peek, including sources in the same workspace or different workspaces.
+Switching agents leaves their viewers open with the current filter, selection,
+and reader intact. Invoking `peek` inside a viewer closes that viewer. Pane
+moves retain the association through the stable terminal ID. The picker shows
+key, status, summary, and the formatted issue preview; descriptions and comments are rendered as readable text.
 
 ## Requirements
 
@@ -152,7 +158,7 @@ instructions before opening a split.
 
 ## Install and set up
 
-**Release status:** `0.1.0` is unreleased; there are no release tags yet.
+**Release status:** `0.2.0` is prepared for the first versioned release.
 The command below installs the development version from the default branch.
 
 With Herdr and git installed, install the plugin:
@@ -190,7 +196,13 @@ Maintainers should use the [release checklist](RELEASING.md).
 If your installation uses the old `hlmmkttm.jira-peek` identifier, follow the
 [migration steps](#migrate-from-the-old-plugin-id) before updating.
 
-Close the Peek viewer before updating. For a GitHub-managed installation,
+Close all Peek viewers before updating. When upgrading from the `0.1.0`
+development version, old viewers have no recorded source owner. If one remains
+open, Peek asks you to close it with Esc before opening another; invoking Peek
+inside that old viewer also closes it. Old selection state is not migrated to
+an arbitrary agent. Dead tracking records are cleared automatically.
+
+For a GitHub-managed installation,
 rerun the install command above to replace the managed checkout with the
 current default branch. Keep personal settings in the separate config
 directory. Herdr refuses to install over a locally linked checkout; update

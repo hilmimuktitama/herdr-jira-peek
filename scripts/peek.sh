@@ -3,10 +3,13 @@
 # Scan the focused pane's output for Jira keys, then review one in an adjacent pane.
 set -eu
 . "$(dirname "$0")/common.sh"
-lock_acquire
-if toggle_viewer; then exit 0; fi
 require_fzf
 require_twg
+lock_acquire
+resolve_action_source
+check_legacy_viewer
+if toggle_viewer; then exit 0; fi
+[ "$ACTION_IS_VIEWER" -eq 0 ] || die 'viewer tracking changed; invoke Peek from the source pane'
 
 pid=$(pane_id)
 [ -n "$pid" ] || die 'no pane in context'

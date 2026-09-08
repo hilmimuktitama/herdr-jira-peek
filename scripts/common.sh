@@ -558,7 +558,11 @@ fetch_failure() {
 save_key() {
   key=${1:-}
   validate_key "$key" || die "invalid Jira issue key"
-  printf '%s\n' "$key" > "$KEY_FILE"
+  key_tmp=$(mktemp "${KEY_FILE%/*}/.key.XXXXXX") || die 'could not save selected issue'
+  if ! { printf '%s\n' "$key" > "$key_tmp" && mv "$key_tmp" "$KEY_FILE"; }; then
+    rm -f "$key_tmp"
+    die 'could not save selected issue'
+  fi
 }
 
 lock_is_stale() {
@@ -765,6 +769,70 @@ validate_terminal_id() {
   validate_pane_id "${1:-}"
 }
 
+# The session lock protects the registry and open/toggle handoff. Source state
+# is keyed by stable terminal identity, never by focus or a mutable pane ID.
+select_source_state() {
+  scope_terminal=${1:-}
+  validate_terminal_id "$scope_terminal" || die 'invalid source terminal ID'
+  ensure_private_dir "$HANDOFF_STATE_DIR/sources" 'source registry directory'
+  SOURCE_STATE_DIR="$HANDOFF_STATE_DIR/sources/source-$scope_terminal"
+  ensure_private_dir "$SOURCE_STATE_DIR" 'source state directory'
+  KEY_FILE="$SOURCE_STATE_DIR/key"
+  CANDIDATES_FILE="${VIEWER_STATE_DIR:-$SOURCE_STATE_DIR}/candidates"
+  VIEWER_PANE_FILE="$SOURCE_STATE_DIR/viewer-pane"
+}
+
+pane_terminal() {
+  validate_pane_id "${1:-}" || return 1
+  pane_response=$("$HERDR" pane get "$1" 2>/dev/null) || return 1
+  printf '%s\n' "$pane_response" | jq -er \
+    '.result.pane.terminal_id | select(type == "string" and length > 0)'
+}
+
+# Old records cannot be assigned to a source reliably. Never close an old
+# viewer from an unrelated pane or silently open a duplicate beside it.
+check_legacy_viewer() {
+  legacy_file="$HANDOFF_STATE_DIR/viewer-pane"
+  [ -f "$legacy_file" ] && [ ! -L "$legacy_file" ] || return 0
+  legacy_terminal=$(sed -n '2p' "$legacy_file")
+  if validate_terminal_id "$legacy_terminal"; then
+    legacy_status=0
+    legacy_pane=$(resolve_terminal_pane "$legacy_terminal") || legacy_status=$?
+    if [ "$legacy_status" -eq 0 ]; then
+      if [ "$action_terminal" = "$legacy_terminal" ]; then
+        "$HERDR" plugin pane close "$legacy_pane" || die 'could not close pre-upgrade Peek viewer'
+        rm -f "$legacy_file"
+        exit 0
+      fi
+      die 'close the pre-upgrade Peek viewer with Esc, then invoke Peek again'
+    fi
+    [ "$legacy_status" -eq 1 ] || die 'could not inspect pre-upgrade Peek viewer'
+  fi
+  rm -f "$legacy_file"
+}
+
+resolve_action_source() {
+  source_pane=$(pane_id)
+  validate_pane_id "$source_pane" || die 'no valid pane in context'
+  action_terminal=$(pane_terminal "$source_pane") || die 'could not inspect source pane'
+  validate_terminal_id "$action_terminal" || die 'Herdr returned no valid source terminal ID'
+  source_terminal=$action_terminal
+  ACTION_IS_VIEWER=0
+  # Reverse lookup also works after the viewer moves to another pane/workspace.
+  for source_record in "$HANDOFF_STATE_DIR"/sources/source-*/viewer-pane; do
+    [ -f "$source_record" ] && [ ! -L "$source_record" ] || continue
+    [ "$(wc -l < "$source_record" | tr -d ' ')" = 2 ] || continue
+    [ "$(sed -n '2p' "$source_record")" = "$action_terminal" ] || continue
+    source_owner=${source_record%/viewer-pane}
+    source_owner=${source_owner##*/source-}
+    validate_terminal_id "$source_owner" || continue
+    source_terminal=$source_owner
+    ACTION_IS_VIEWER=1
+    break
+  done
+  select_source_state "$source_terminal"
+}
+
 clear_viewer_tracking() {
   rm -f "$VIEWER_PANE_FILE" \
     || die 'could not remove viewer pane tracking'
@@ -868,7 +936,8 @@ toggle_viewer() {
   toggle_pane=$(sed -n '1p' "$VIEWER_PANE_FILE" 2>/dev/null || true)
   toggle_terminal=$(sed -n '2p' "$VIEWER_PANE_FILE" 2>/dev/null || true)
   validate_pane_id "$toggle_pane" || { clear_viewer_tracking; return 1; }
-  if "$HERDR" pane get "$toggle_pane" >/dev/null 2>&1; then
+  if [ "$(pane_terminal "$toggle_pane" || true)" = "$toggle_terminal" ] \
+    && validate_terminal_id "$toggle_terminal"; then
     close_viewer_pane "$toggle_pane"; return 0
   fi
   validate_terminal_id "$toggle_terminal" || { clear_viewer_tracking; return 1; }
@@ -888,16 +957,11 @@ toggle_viewer() {
 
 # Open a viewer in an adjacent right-side split.
 show() {
-  source_pane=$(pane_id)
-  [ -n "$source_pane" ] || die 'no pane in context'
-  validate_pane_id "$source_pane" || die 'invalid pane in context'
-  source_tmp=$(mktemp "$HANDOFF_STATE_DIR/.source-pane.XXXXXX") || die 'could not inspect source pane'
-  source_status=0
-  "$HERDR" pane get "$source_pane" >"$source_tmp" 2>/dev/null || source_status=$?
-  source_terminal=
-  [ "$source_status" -eq 0 ] && source_terminal=$(jq -er '.result.pane.terminal_id | select(type == "string" and length > 0)' "$source_tmp" 2>/dev/null || true)
-  rm -f "$source_tmp"
-  validate_terminal_id "$source_terminal" || die 'Herdr returned no valid source terminal ID'
+  # resolve_action_source captured the action's identity before any toggle.
+  # Resolve again if a layout operation moved the terminal during the scan.
+  if [ "$(pane_terminal "$source_pane" || true)" != "$source_terminal" ]; then
+    source_pane=$(resolve_terminal_pane "$source_terminal") || die 'source terminal is no longer available'
+  fi
   save_key "$1"
 
   open_tmp=$(mktemp "$HANDOFF_STATE_DIR/.viewer-open.XXXXXX") \
@@ -1146,3 +1210,9 @@ fetch() {
   printf '%s' "$out"
   return 0
 }
+
+# Viewer helpers inherit their source identity; they must never infer it from
+# the focused terminal, which may belong to a different agent by now.
+if [ -n "${HERDR_VIEWER_SOURCE_TERMINAL:-}" ]; then
+  select_source_state "$HERDR_VIEWER_SOURCE_TERMINAL"
+fi

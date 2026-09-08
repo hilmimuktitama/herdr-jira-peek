@@ -4,10 +4,13 @@
 # The public manifest registers no link handler; Ctrl+click does not invoke it.
 set -eu
 . "$(dirname "$0")/common.sh"
-lock_acquire
-if toggle_viewer; then exit 0; fi
 require_fzf
 require_twg
+lock_acquire
+resolve_action_source
+check_legacy_viewer
+if toggle_viewer; then exit 0; fi
+[ "$ACTION_IS_VIEWER" -eq 0 ] || die 'viewer tracking changed; invoke Peek from the source pane'
 
 url=${HERDR_PLUGIN_CLICKED_URL:-}
 [ -n "$url" ] || die 'no clicked URL in context'

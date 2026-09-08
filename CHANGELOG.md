@@ -1,8 +1,24 @@
 # Changelog
 
-## 0.1.0 — Unreleased
+## 0.2.0 — 2026-09-08
 
-Initial release planned; no release tag has been published.
+First versioned release, including the initial feature set below.
+
+- Keep an independent Peek viewer for each source terminal in a Herdr session.
+  Opening Peek on another agent, pane, or workspace preserves existing viewers.
+- Toggle only the current source's viewer, or the focused viewer itself, even
+  after panes move. Verify terminal identity before closing a reused pane ID.
+- Isolate each source's candidates and last-selected issue. Browser actions use
+  the current source/viewer selection; background callbacks keep their owner.
+- Preserve shared issue caching and serialize concurrent viewer lifecycle changes.
+- Close all pre-upgrade viewers before updating from the development version;
+  their old tracking cannot reliably identify the source terminal. Stale legacy
+  records are removed automatically without closing unrelated viewers.
+- Known limitation: the historical intermittent macOS PTY paging-test timeout
+  has not been diagnosed. Automated tests use simulated Herdr and Jira services;
+  they do not establish live Jira connectivity.
+
+## 0.1.0 — Development baseline (not released)
 
 - Check mandatory fzf, jq, less, and TWG prerequisites during setup, including
   TWG minimum version and authentication/connectivity. Preserve config on reruns.

@@ -1509,11 +1509,11 @@ pass 'malicious key rejected'
 export HERDR_PLUGIN_CONTEXT_JSON='{"focused_pane_id":"link-source-pane","focused_client_id":"client-1"}'
 export HERDR_PLUGIN_CLICKED_URL='https://jira.example.test/browse/ABC-123?source=test#fragment'
 run sh "$ROOT/scripts/peek-url.sh" >/dev/null
-[ "$(sed -n '1p' "$STATE/candidates")" = ABC-123 ] || fail 'configured clicked URL accepted'
+[ "$(sed -n '1p' "$STATE/sources/source-terminal-source/candidates")" = ABC-123 ] || fail 'configured clicked URL accepted'
 pass 'query-then-fragment clicked URL accepted'
 export HERDR_PLUGIN_CLICKED_URL='https://jira.example.test/browse/ABC-123#fragment?value'
 run sh "$ROOT/scripts/peek-url.sh" >/dev/null
-[ "$(sed -n '1p' "$STATE/candidates")" = ABC-123 ] || fail 'fragment-containing-query clicked URL accepted'
+[ "$(sed -n '1p' "$STATE/sources/source-terminal-source/candidates")" = ABC-123 ] || fail 'fragment-containing-query clicked URL accepted'
 pass 'fragment-containing-query clicked URL accepted'
 
 export HERDR_PLUGIN_CLICKED_URL='https://jira.example.test.evil/browse/ABC-123'
@@ -1533,22 +1533,22 @@ run sh "$ROOT/scripts/peek-url.sh" >/dev/null
 session_a=$(session_dir "$SOCKET_A")
 session_b=$(session_dir "$SOCKET_B")
 [ "$session_a" != "$session_b" ] || fail 'socket sessions have distinct state paths'
-[ "$(sed -n '1p' "$session_a/key")" = ABC-123 ] || fail 'socket A key state'
-[ "$(sed -n '1p' "$session_a/candidates")" = ABC-123 ] || fail 'socket A candidate state'
-[ "$(sed -n '1p' "$session_b/key")" = DEF-9 ] || fail 'socket B key state'
-[ "$(sed -n '1p' "$session_b/candidates")" = DEF-9 ] || fail 'socket B candidate state'
+[ "$(sed -n '1p' "$session_a/sources/source-terminal-source/key")" = ABC-123 ] || fail 'socket A key state'
+[ "$(sed -n '1p' "$session_a/sources/source-terminal-source/candidates")" = ABC-123 ] || fail 'socket A candidate state'
+[ "$(sed -n '1p' "$session_b/sources/source-terminal-source/key")" = DEF-9 ] || fail 'socket B key state'
+[ "$(sed -n '1p' "$session_b/sources/source-terminal-source/candidates")" = DEF-9 ] || fail 'socket B candidate state'
 pass 'socket-scoped key and candidate state'
-[ -s "$session_a/viewer-pane" ] || fail 'socket A viewer pane tracking'
-[ -s "$session_b/viewer-pane" ] || fail 'socket B viewer pane tracking'
-pane_a=$(sed -n '1p' "$session_a/viewer-pane")
-pane_b=$(sed -n '1p' "$session_b/viewer-pane")
-terminal_a=$(sed -n '2p' "$session_a/viewer-pane")
-terminal_b=$(sed -n '2p' "$session_b/viewer-pane")
+[ -s "$session_a/sources/source-terminal-source/viewer-pane" ] || fail 'socket A viewer pane tracking'
+[ -s "$session_b/sources/source-terminal-source/viewer-pane" ] || fail 'socket B viewer pane tracking'
+pane_a=$(sed -n '1p' "$session_a/sources/source-terminal-source/viewer-pane")
+pane_b=$(sed -n '1p' "$session_b/sources/source-terminal-source/viewer-pane")
+terminal_a=$(sed -n '2p' "$session_a/sources/source-terminal-source/viewer-pane")
+terminal_b=$(sed -n '2p' "$session_b/sources/source-terminal-source/viewer-pane")
 [ "$pane_a" != "$pane_b" ] || fail 'socket sessions have distinct viewer panes'
 [ "$terminal_a" != "$terminal_b" ] || fail 'socket sessions have distinct viewer terminals'
 [ "$pane_a" != "$terminal_a" ] || fail 'viewer pane tracking stores pane ID separately'
 [ "$pane_b" != "$terminal_b" ] || fail 'viewer pane tracking stores pane ID separately'
-[ ! -f "$STATE/viewer-pane" ] || fail 'viewer pane state is session scoped'
+[ ! -f "$STATE/sources/source-terminal-source/viewer-pane" ] || fail 'viewer pane state is session scoped'
 pass 'socket-scoped viewer pane state'
 case "$(sed -n '$p' "$HERDR_LOG")" in
   *'plugin pane open --plugin jira-peek --entrypoint viewer --placement split --target-pane link-source-pane'*'--direction right'*'--focus'*)
@@ -1565,12 +1565,12 @@ if run sh "$ROOT/scripts/peek-url.sh" >/dev/null 2>&1; then
 fi
 [ "$(sed -n '1p' "$HERDR_OPEN_COUNT")" = "$close_failure_open_count" ] \
   || fail 'failed viewer close did not open a duplicate'
-[ "$(sed -n '1p' "$session_a/viewer-pane")" = "$pane_a" ] \
+[ "$(sed -n '1p' "$session_a/sources/source-terminal-source/viewer-pane")" = "$pane_a" ] \
   || fail 'failed viewer close preserved pane tracking'
 pass 'failed live viewer close preserves tracking'
 unset HERDR_CLOSE_FAIL_PANE
 run sh "$ROOT/scripts/peek-url.sh" >/dev/null
-[ ! -f "$session_a/viewer-pane" ] || fail 'successful retry clears viewer tracking'
+[ ! -f "$session_a/sources/source-terminal-source/viewer-pane" ] || fail 'successful retry clears viewer tracking'
 pass 'successful viewer close clears tracking'
 export HERDR_SOCKET_PATH="$SOCKET_B"
 
@@ -1582,7 +1582,7 @@ mv "$remapped_live" "$HERDR_LIVE_PANES"
 open_count_before=$(sed -n '1p' "$HERDR_OPEN_COUNT")
 export HERDR_PLUGIN_CLICKED_URL='https://jira.example.test/browse/DEF-9'
 run sh "$ROOT/scripts/peek-url.sh" >/dev/null
-[ ! -f "$session_b/viewer-pane" ] || fail 'live viewer pane tracking removed on toggle'
+[ ! -f "$session_b/sources/source-terminal-source/viewer-pane" ] || fail 'live viewer pane tracking removed on toggle'
 [ "$(sed -n '1p' "$HERDR_OPEN_COUNT")" = "$open_count_before" ] \
   || fail 'live viewer toggle did not open a duplicate'
 if ! awk -v pane=moved-pane '
@@ -1596,13 +1596,13 @@ if ! awk -v pane=moved-pane '
 fi
 pass 'moved viewer pane toggle closes without duplicate'
 
-printf '%s\n%s\n' stale-pane stale-terminal > "$session_b/viewer-pane"
+printf '%s\n%s\n' stale-pane stale-terminal > "$session_b/sources/source-terminal-source/viewer-pane"
 run sh "$ROOT/scripts/peek-url.sh" >/dev/null
 [ "$(sed -n '1p' "$HERDR_OPEN_COUNT")" = "$((open_count_before + 1))" ] \
   || fail 'stale viewer pane opens a new split'
-[ "$(sed -n '1p' "$session_b/viewer-pane")" != stale-pane ] \
+[ "$(sed -n '1p' "$session_b/sources/source-terminal-source/viewer-pane")" != stale-pane ] \
   || fail 'stale viewer pane tracking was replaced'
-[ "$(sed -n '2p' "$session_b/viewer-pane")" != stale-terminal ] \
+[ "$(sed -n '2p' "$session_b/sources/source-terminal-source/viewer-pane")" != stale-terminal ] \
   || fail 'stale viewer terminal tracking was replaced'
 pass 'stale viewer pane tracking reopens safely'
 
@@ -1657,7 +1657,7 @@ if [ ! -f "$TMP/concurrent-second-started" ]; then
   wait "$second_pid" || true
   fail 'concurrent serialization second invocation started'
 fi
-[ "$(sed -n '1p' "$concurrent_session/candidates")" = ABC-123 ] \
+[ "$(sed -n '1p' "$concurrent_session/sources/source-terminal-source/candidates")" = ABC-123 ] \
   || {
     : > "$HERDR_OPEN_RELEASE"
     wait "$first_pid" || true
@@ -1675,9 +1675,9 @@ unset HERDR_OPEN_GATE
 [ "$(sed -n '1p' "$HERDR_OPEN_COUNT")" = "$((open_count_before + 1))" ] \
   || fail 'serialized concurrent invocations opened one split'
 [ ! -d "$concurrent_session/.lock" ] || fail 'serialized concurrent lock was released'
-[ ! -f "$concurrent_session/viewer-pane" ] \
+[ ! -f "$concurrent_session/sources/source-terminal-source/viewer-pane" ] \
   || fail 'serialized concurrent toggle removed viewer tracking'
-[ "$(sed -n '1p' "$concurrent_session/candidates")" = ABC-123 ] \
+[ "$(sed -n '1p' "$concurrent_session/sources/source-terminal-source/candidates")" = ABC-123 ] \
   || fail 'serialized concurrent candidate handoff completed'
 pass 'concurrent candidate and viewer lifecycle serialization'
 
@@ -1686,8 +1686,8 @@ export HERDR_PLUGIN_CLICKED_URL=
 export HERDR_PANE_ID=focused-pane
 unset HERDR_PLUGIN_CONTEXT_JSON
 run sh "$ROOT/scripts/peek.sh" >/dev/null
-[ "$(sed -n '1p' "$STATE/candidates")" = DEF-9 ] || fail 'peek selects newest pane key'
-[ "$(sed -n '1p' "$STATE/key")" = DEF-9 ] || fail 'peek saves newest pane key'
+[ "$(sed -n '1p' "$STATE/sources/source-terminal-source/candidates")" = DEF-9 ] || fail 'peek selects newest pane key'
+[ "$(sed -n '1p' "$STATE/sources/source-terminal-source/key")" = DEF-9 ] || fail 'peek saves newest pane key'
 case "$(sed -n '$p' "$HERDR_LOG")" in
   *'plugin pane open --plugin jira-peek --entrypoint viewer --placement split --target-pane focused-pane'*'--direction right'*'--focus'*)
 pass 'noninteractive peek opens adjacent split' ;;
@@ -1704,7 +1704,7 @@ export HERDR_DETECTION_TEXT='ABC-123 GHI-7 DEF-9 ABC-123'
 : > "$HERDR_SOURCE_LOG"
 env HERDR_PLUGIN_CONFIG_DIR="$SOURCE_CONFIG" HERDR_PLUGIN_STATE_DIR="$SOURCE_STATE" HERDR_PANE_ID=focused-pane HERDR_SOCKET_PATH= sh "$ROOT/scripts/peek.sh" >/dev/null || fail 'source merge fixture'
 awk 'NR==1&&$0~ /--source visible$/{a=1} NR==2&&$0~ /--source recent-unwrapped$/{b=1} NR==3{bad=1} END{exit !(a&&b&&!bad)}' "$HERDR_SOURCE_LOG" || fail 'detection was not used when sources had keys'
-awk 'NR==1&&$0=="ABC-123"{a=1} NR==2&&$0=="DEF-9"{b=1} NR==3&&$0=="GHI-7"{c=1} END{exit !(a&&b&&c&&NR==3)}' "$SOURCE_STATE/candidates" || fail 'visible precedes recent with global dedup and cap'
+awk 'NR==1&&$0=="ABC-123"{a=1} NR==2&&$0=="DEF-9"{b=1} NR==3&&$0=="GHI-7"{c=1} END{exit !(a&&b&&c&&NR==3)}' "$SOURCE_STATE/sources/source-terminal-source/candidates" || fail 'visible precedes recent with global dedup and cap'
 pass 'visible precedes recent with global dedup and cap'
 # Toggle the first source viewer closed before reusing its state for the
 # independent detection-only scan; approved toggle-first must not rescan.
@@ -1715,7 +1715,7 @@ printf '%s\n' 'JIRA_BASE="https://jira.example.test"' 'JIRA_SITE="jira-example"'
  : > "$HERDR_SOURCE_LOG"
 env HERDR_PLUGIN_CONFIG_DIR="$SOURCE_CONFIG" HERDR_PLUGIN_STATE_DIR="$SOURCE_STATE" HERDR_PANE_ID=focused-pane HERDR_SOCKET_PATH= sh "$ROOT/scripts/peek.sh" >/dev/null || fail 'detection fallback fixture'
 awk 'NR==3&&$0~ /--source detection$/{ok=1} END{exit !ok}' "$HERDR_SOURCE_LOG" || fail 'detection fallback source call'
-awk 'NR==1&&$0=="ABC-123"{a=1} NR==2&&$0=="DEF-9"{b=1} END{exit !(a&&b&&NR==2)}' "$SOURCE_STATE/candidates" || fail 'detection fallback is capped'
+awk 'NR==1&&$0=="ABC-123"{a=1} NR==2&&$0=="DEF-9"{b=1} END{exit !(a&&b&&NR==2)}' "$SOURCE_STATE/sources/source-terminal-source/candidates" || fail 'detection fallback is capped'
 unset HERDR_VISIBLE_TEXT HERDR_RECENT_TEXT HERDR_DETECTION_TEXT
 pass 'detection fallback is capped and only used when both sources are empty'
 
@@ -1736,7 +1736,7 @@ if ! env HERDR_PLUGIN_CONFIG_DIR="$MAX_CONFIG" HERDR_PLUGIN_STATE_DIR="$MAX_STAT
   sh "$ROOT/scripts/peek.sh" >/dev/null; then
   fail 'candidate cap and newest ordering'
 fi
-if ! awk 'NR == 1 && $0 == "ABC-123" { first=1 } NR == 2 && $0 == "GHI-7" { second=1 } END { exit !(first && second && NR == 2) }' "$MAX_STATE/candidates"; then
+if ! awk 'NR == 1 && $0 == "ABC-123" { first=1 } NR == 2 && $0 == "GHI-7" { second=1 } END { exit !(first && second && NR == 2) }' "$MAX_STATE/sources/source-terminal-source/candidates"; then
   fail 'candidate cap and newest ordering'
 fi
 pass 'candidate cap preserves newest-first order'
@@ -1761,7 +1761,7 @@ case "$too_many_output" in
   *) fail 'MAX_CANDIDATES upper-bound diagnostic' ;;
 esac
 
-printf '%s\n' ABC-123 > "$STATE/key"
+printf '%s\n' ABC-123 > "$STATE/sources/source-terminal-source/key"
 export FAKE_UNAME=Darwin
 run sh "$ROOT/scripts/open-browser.sh"
 [ "$(sed -n '1p' "$OPEN_LOG")" = 'https://jira.example.test/browse/ABC-123?from=twg' ] \
@@ -1798,5 +1798,6 @@ run sh "$ROOT/scripts/open-browser.sh" --copy-link ABC-123
 pass 'configured URL fallback'
 
 sh "$ROOT/tests/rescan.sh"
+sh "$ROOT/tests/multipane.sh"
 pass 'all runtime tests passed'
 printf 'all tests passed\n'

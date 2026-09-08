@@ -37,7 +37,12 @@ permissions are managed separately; see [third-party notices](THIRD_PARTY_NOTICE
 | Source pane output | Written to private scan files before extracting keys. May contain unrelated terminal content. Removed on normal scan exit or handled signals. |
 | Picker metadata | A capped batch of summaries, statuses, assignees, and update times is requested. Viewer files are removed on normal viewer exit. |
 | Full issue JSON | Fetched lazily for a selected preview or reader. With a positive TTL, stored in the issue cache; expired files are purged at runtime startup. With `CACHE_TTL_MIN=0`, a temporary render file is used instead. |
-| Selection and bookkeeping | The last selected key, initial candidate list, pane tracking, cache-generation filenames, and diagnostic filenames can persist outside the issue cache. Some contain issue keys. |
+| Selection and bookkeeping | Each source terminal's last selected key, initial candidate list, pane tracking, cache-generation filenames, and diagnostic filenames can persist outside the issue cache. Some contain issue keys. |
+
+Source selection and tracking are stored under the current session's
+`sources/source-<terminal-id>/` directory. They can remain after a source or
+viewer closes. The issue cache is shared across sources and sessions, so
+refreshing or clearing an issue affects that shared cache.
 
 A refresh removes the selected cached issue before fetching a replacement.
 `clear-cache` removes only regular files directly inside the issue-cache
