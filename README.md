@@ -158,13 +158,13 @@ instructions before opening a split.
 
 ## Install and set up
 
-**Release status:** `0.2.0` is prepared for the first versioned release.
-The command below installs the development version from the default branch.
+**Latest release:** [0.2.0](https://github.com/hilmimuktitama/herdr-jira-peek/releases/tag/v0.2.0).
+The command below installs the full reviewed commit SHA for this release.
 
 With Herdr and git installed, install the plugin:
 
 ```sh
-herdr plugin install hilmimuktitama/herdr-jira-peek
+herdr plugin install hilmimuktitama/herdr-jira-peek --ref 952fd6eba081810d79268bed5ec5fa46f32d2a1d
 ```
 
 1. Select **Set up Peek for Jira** from Herdr's plugin actions. It creates the
@@ -204,7 +204,7 @@ an arbitrary agent. Dead tracking records are cleared automatically.
 
 For a GitHub-managed installation,
 rerun the install command above to replace the managed checkout with the
-current default branch. Keep personal settings in the separate config
+reviewed release revision. Keep personal settings in the separate config
 directory. Herdr refuses to install over a locally linked checkout; update
 that checkout directly instead.
 
@@ -231,8 +231,8 @@ not a value read from your Jira account or local configuration.
 2. Remove the old registration: `herdr plugin uninstall hlmmkttm.jira-peek` for
    a GitHub-managed installation, or `herdr plugin unlink hlmmkttm.jira-peek`
    for a locally linked checkout.
-3. Install with `herdr plugin install hilmimuktitama/herdr-jira-peek`, or update
-   your local checkout and link it again. Run **Set up Peek for Jira**. The new
+3. Install using the pinned command in [Install and set up](#install-and-set-up),
+   or update your local checkout and link it again. Run **Set up Peek for Jira**. The new
    config directory is shown by `herdr plugin config-dir jira-peek`; reapply
    your saved settings there. TWG authentication remains managed by TWG.
 4. Update your keybinding to `command = "jira-peek.peek"` and any other action

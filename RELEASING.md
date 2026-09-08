@@ -3,9 +3,9 @@
 Canonical repository: [hilmimuktitama/herdr-jira-peek](https://github.com/hilmimuktitama/herdr-jira-peek).
 Plugin ID: `jira-peek`.
 
-The repository became public on 2026-09-07. Version `0.2.0` is prepared as the
-first versioned release; `0.1.0` was the development baseline. This project has
-no publish automation.
+The repository became public on 2026-09-07. Version `0.2.0` was published on
+2026-09-08 as the first versioned release; `0.1.0` was the development baseline.
+This project has no publish automation.
 
 ## Before making the repository public
 
@@ -63,9 +63,12 @@ previous public commit history has not been rewritten.
   sandbox to create its PTY; the sandboxed attempt could not run that check.
 - [x] Explicitly retain the historical intermittent macOS PTY paging timeout
   as an undiagnosed limitation. This run passed; it does not establish a fix.
-- [ ] Verify Linux and macOS CI on the selected release commit.
-- [ ] Publish the tag and release, then pin README installation to the full
-  reviewed commit SHA with `--ref`.
+- [x] Verify Linux and macOS CI on release commit
+  `952fd6eba081810d79268bed5ec5fa46f32d2a1d`: both jobs passed in
+  [run 34179987128](https://github.com/hilmimuktitama/herdr-jira-peek/actions/runs/34179987128).
+- [x] Publish [v0.2.0](https://github.com/hilmimuktitama/herdr-jira-peek/releases/tag/v0.2.0)
+  from that commit and pin README installation to its full SHA with `--ref`.
+  The subsequent documentation commit records publication; it changes no runtime code.
 
 No live Jira site or existing user Herdr panes were used for this release's
 validation. Lifecycle tests use simulated Herdr responses and fictional keys.
