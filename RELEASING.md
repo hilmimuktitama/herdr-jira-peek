@@ -5,7 +5,7 @@ Plugin ID: `jira-peek`.
 
 The repository became public on 2026-09-07. Version `0.2.0` was published on
 2026-09-08 as the first versioned release; `0.1.0` was the development baseline.
-The latest release is `0.2.1`, published on 2026-09-08. This project has no
+The latest release is `0.2.2`, published on 2026-09-08. This project has no
 publish automation.
 
 ## Before making the repository public
@@ -67,8 +67,12 @@ previous public commit history has not been rewritten.
   (previously 400 ms) and 122 ms for cached previews (previously 801 ms).
   The terminal arrow/filter burst improved from 947 ms to about 200–270 ms.
   These are local fixture measurements, not live Jira or concurrent-agent tests.
-- [ ] Verify Linux and macOS CI on the release commit.
-- [ ] Publish v0.2.2 and pin README installation to the release commit SHA.
+- [x] Verify Linux and macOS CI on release commit
+  `ffc3e13517bf3e9d9ebbd451c4abbcf89c8f03f7`: both jobs passed in
+  [run 34231248783](https://github.com/hilmimuktitama/herdr-jira-peek/actions/runs/34231248783).
+- [x] Publish [v0.2.2](https://github.com/hilmimuktitama/herdr-jira-peek/releases/tag/v0.2.2)
+  from that commit and pin README installation to its full SHA with `--ref`.
+  The subsequent documentation commit records publication; it changes no runtime code.
 
 ## Version 0.2.1 release validation — 2026-09-08
 
