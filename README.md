@@ -400,8 +400,11 @@ same viewer, preserving filter and selection when possible. It performs no
 Herdr pane layout operations. On fzf 0.63 or newer, “Rescanning source pane…”
 appears immediately and the picker stays usable while the scan runs; repeated
 Ctrl-G presses are ignored until it finishes. The message then changes to the
-result or an error. Older fzf versions show a quiet Herdr notification during
-the scan; the basic menu prints the progress message before reading the source.
+result or an error. With the live picker connection, rescans run in a dedicated
+worker, so resizing the pane or waiting for Jira cannot cancel a source scan.
+Unchanged results update only the status, preserving the preview and its scroll
+position. Older fzf versions show a quiet Herdr notification during the scan;
+the basic menu prints the progress message before reading the source.
 
 ## Controls: reader mode
 

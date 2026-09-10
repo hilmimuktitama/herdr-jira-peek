@@ -4,6 +4,16 @@
 set -eu
 DIR=${DIR:-$(CDPATH='' cd "${0%/*}" && pwd)}
 kind=${1:-}; key=${2:-}
+if [ "$kind" = queue-rescan ]; then
+  # Only enqueue on fzf's input loop. The viewer-owned worker survives resize
+  # background transforms and keeps Herdr reads/configuration off this path.
+  [ ! -e "$VIEWER_STATE_DIR/rescan-busy" ] || exit 0
+  : > "$VIEWER_STATE_DIR/rescan-busy"
+  header=$(sh "$DIR/viewer-rows.sh" rescan-start)
+  : > "$VIEWER_STATE_DIR/pending-rescan"
+  printf 'change-header[%s]' "$header"
+  exit 0
+fi
 if [ "$kind" = focus ]; then
   # The viewer has already validated config, scoped the key file, and built
   # its candidate list. Navigation must not reload config or sweep caches.

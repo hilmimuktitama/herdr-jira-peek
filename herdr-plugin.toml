@@ -1,6 +1,6 @@
 id = "jira-peek"
 name = "Peek for Jira"
-version = "0.2.3"
+version = "0.2.4"
 min_herdr_version = "0.8.2"
 description = "Read-only Jira Cloud previews from the current Herdr pane"
 platforms = ["macos", "linux"]

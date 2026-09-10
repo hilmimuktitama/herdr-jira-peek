@@ -100,9 +100,19 @@ grep -Fq 'rebind(ctrl-g)+reload(' "$tmp/actions"
 grep -Fqx 'Rescanned: 3 issues' "$tmp/state/status"
 printf '%s\n' 'ok - rescan exposes progress before a delayed read and restores controls on completion'
 if HERDR_READ_MODE=fail sh "$ROOT/scripts/viewer-rescan.sh" --fzf > "$tmp/actions"; then exit 1; fi
-grep -Fq 'rebind(ctrl-g)+reload(' "$tmp/actions"
+grep -Fq 'rebind(ctrl-g)+transform-header(' "$tmp/actions"
 grep -Fq 'Could not read source terminal; keeping previous 3' "$tmp/state/status"
 printf '%s\n' 'ok - failed background rescan restores controls and reports failure'
+sh "$ROOT/scripts/viewer-rescan.sh" --fzf > "$tmp/actions"
+grep -Fq 'rebind(ctrl-g)+transform-header(' "$tmp/actions"
+if grep -Eq 'reload\(|refresh-preview' "$tmp/actions"; then exit 1; fi
+printf '%s\n' 'ok - unchanged rescan updates status without reloading rows or restarting preview'
+# Large scrollback repetition must still preserve newest-first ordering and
+# reject unsafe/disallowed keys with a single validation pass.
+HERDR_VISIBLE_TEXT=$(awk 'BEGIN { for (i=0; i<2000; i++) printf "ABC-1 ABC-2 XYZ-7 "; print "DEF-3 ABC-1" }') \
+  HERDR_RECENT_TEXT= sh "$ROOT/scripts/viewer-rescan.sh"
+[ "$(cat "$tmp/state/candidates")" = "$(printf '%s\n' ABC-1 DEF-3 ABC-2)" ] || exit 1
+printf '%s\n' 'ok - repeated scrollback keys remain ordered, deduplicated, and allowlisted'
 : > "$tmp/herdr.log"
 sh "$ROOT/scripts/viewer-rescan.sh" --notify
 awk '/notification show Rescanning Jira Peek.*--sound none/ { feedback=1 } /pane read/ { read_seen=1; if (!feedback) late=1 } END { exit !(feedback && read_seen && !late) }' "$tmp/herdr.log"

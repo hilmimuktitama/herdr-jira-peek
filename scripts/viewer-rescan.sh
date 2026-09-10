@@ -5,6 +5,26 @@ set -eu
 . "$(dirname "$0")/common.sh"
 DIR=$(CDPATH= cd "$(dirname "$0")" && pwd)
 state=${VIEWER_STATE_DIR:?}
+if [ "${1:-}" = --watch ]; then
+  # Separate from both metadata I/O and fzf's cancellable resize transforms.
+  cd "$state"
+  while [ -d "$state" ]; do
+    if [ -e "$state/pending-rescan" ]; then
+      rm -f "$state/pending-rescan"
+      actions=$(sh "$DIR/viewer-rescan.sh" --fzf) || true
+      # Retry delivery while the viewer lives; retain busy until fzf has the
+      # completed snapshot so repeated key presses cannot race selection.
+      while [ -d "$state" ]; do
+        if curl -sS --max-time 1 --unix-socket "$VIEWER_FZF_SOCKET" -X POST http://localhost \
+          -d "$actions" >/dev/null 2>&1; then break; fi
+        sleep 0.1
+      done
+      rm -f "$state/rescan-busy"
+    fi
+    sleep 0.1
+  done
+  exit 0
+fi
 status_file="$state/status"
 source_pane_arg=${HERDR_VIEWER_SOURCE_PANE:-}; source_terminal_arg=${HERDR_VIEWER_SOURCE_TERMINAL:-}
 write_status() { status_tmp=$(mktemp "$state/.status.XXXXXX") || return 0; printf '%s\n' "$1" >"$status_tmp" && mv "$status_tmp" "$status_file"; rm -f "$status_tmp"; }
@@ -20,7 +40,16 @@ cleanup() {
   if [ "${1:-}" = --fzf ]; then
     # The load binding paints the result after the new rows are ready. Showing
     # completion before reload finishes can invite a keypress during tracking.
-    printf '%s\n' 'rebind(ctrl-g)+reload(sh "$DIR/viewer-rows.sh")'
+    if published=$(sh "$DIR/viewer-rows.sh" publish); then
+      if [ "$published" = unchanged ]; then
+        # Status-only completion keeps the current preview and scroll intact.
+        printf '%s\n' 'rebind(ctrl-g)+transform-header(sh "$DIR/viewer-rows.sh" header)'
+      else
+        printf '%s\n' 'rebind(ctrl-g)+reload(cat "$VIEWER_STATE_DIR/snapshot")'
+      fi
+    else
+      printf '%s\n' 'rebind(ctrl-g)+transform-header(sh "$DIR/viewer-rows.sh" header)'
+    fi
   fi
 }
 rescan_mode=${1:-}

@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.2.4 — 2026-09-10
+
+- Run Ctrl-G rescans in a dedicated worker when the live picker connection is
+  available. Keep navigation and filtering responsive during source reads,
+  preserve scans across pane resizing, and ignore repeated requests until the
+  current scan finishes.
+- Build and serialize picker snapshots in the background. Update only the
+  status when results are unchanged and avoid duplicate preview refreshes.
+- Validate detected issue keys in one pass instead of starting a process for
+  every occurrence in terminal output, speeding up initial scans and rescans.
+- Preserve the intentional opening notification. This release does not claim
+  to fix the reported source-terminal flicker when Herdr opens a split.
+- Extend fictional-fixture coverage for repeated scrollback keys, unchanged
+  results, and resizing during a blocked scan. Make the resize stress test
+  observe a distinct size before checking restoration.
+- Known validation limitation: the local macOS rapid-resize terminal test
+  intermittently times out. Its cause remains undiagnosed.
+
 ## 0.2.3 — 2026-09-08
 
 - Add `PICKER_LAYOUT='top'|'bottom'` configuration. Default to bottom alignment

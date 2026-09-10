@@ -123,6 +123,10 @@ stop_tree() {
   kill -CONT "$p" 2>/dev/null || true; kill -TERM "$p" 2>/dev/null || true
 }
 viewer_cleanup() {
+  if [ -n "${viewer_rescan_worker:-}" ]; then
+    stop_tree "$viewer_rescan_worker" "$$" || true
+    wait "$viewer_rescan_worker" 2>/dev/null || true
+  fi
   if [ -n "${viewer_feedback_worker:-}" ]; then
     stop_tree "$viewer_feedback_worker" "$$" || true
     wait "$viewer_feedback_worker" 2>/dev/null || true
@@ -204,6 +208,8 @@ export VIEWER_METADATA_MODE
 if [ "$live_fzf" -eq 1 ]; then
   sh "$DIR/viewer-ui.sh" watch-messages >/dev/null 2>&1 &
   viewer_feedback_worker=$!
+  sh "$DIR/viewer-rescan.sh" --watch >/dev/null 2>&1 &
+  viewer_rescan_worker=$!
 fi
 input_file=$rows
 
@@ -281,7 +287,13 @@ if [ "$modernfooter" -eq 1 ]; then
 fi
 # Footer and background transforms both arrived in fzf 0.63. Keep the scan
 # separate from reload so metadata updates cannot cancel an in-flight rescan.
-if [ "$modernfooter" -eq 1 ]; then
+if [ "$live_fzf" -eq 1 ]; then
+  rescan_binding='ctrl-g:transform(sh "$DIR/viewer-ui.sh" queue-rescan)'
+  close_binding='esc:abort,ctrl-c:abort,ctrl-q:abort'
+  if [ "$modernfooter" -eq 1 ]; then
+    close_binding='esc:bg-cancel+abort,ctrl-c:bg-cancel+abort,ctrl-q:bg-cancel+abort'
+  fi
+elif [ "$modernfooter" -eq 1 ]; then
   rescan_binding='ctrl-g:unbind(ctrl-g)+transform-header(sh "$DIR/viewer-rows.sh" rescan-start)+bg-transform(sh "$DIR/viewer-rescan.sh" --fzf)'
   close_binding='esc:bg-cancel+abort,ctrl-c:bg-cancel+abort,ctrl-q:bg-cancel+abort'
 else
@@ -322,6 +334,11 @@ case "$fzf_status" in
     exit 0
     ;;
   2)
+    if [ -n "${viewer_rescan_worker:-}" ]; then
+      stop_tree "$viewer_rescan_worker" "$$" || true
+      wait "$viewer_rescan_worker" 2>/dev/null || true
+      viewer_rescan_worker=
+    fi
     if [ -n "${viewer_feedback_worker:-}" ]; then
       stop_tree "$viewer_feedback_worker" "$$" || true
       wait "$viewer_feedback_worker" 2>/dev/null || true

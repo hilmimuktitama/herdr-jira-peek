@@ -351,6 +351,12 @@ exec sh -c {
 } sh $spawn_out(slave,name) &
 await resize-burst-done {RESIZE-BURST-DONE}
 settle_output resize-burst
+# SIGWINCH events can coalesce during the burst. Require an observed, distinct
+# size before restoring; an already-100-column fzf need not repaint at 100.
+set observed_output {}
+exec stty rows 39 columns 90 < $spawn_out(slave,name)
+await resize-burst-distinct-size {PTY body ABC-1 version 1}
+settle_output resize-burst-distinct-size
 set observed_output {}
 exec stty rows 40 columns 100 < $spawn_out(slave,name)
 await resize-burst-restored {PTY body ABC-1 version 1}
@@ -402,12 +408,24 @@ if {[file exists [file join $source scan-release]]} { puts stderr "scan was rele
 send_key "\033OP"
 await rescan-responsive-help {PgUp/PgDn or Ctrl-D/U scroll preview}
 send_key "\033OP"
+# Resizing used to replace the scan's bg-transform, cancel its process, and
+# leave Ctrl-G unbound. The scan must survive and still complete exactly once.
+exec stty rows 35 columns 90 < $spawn_out(slave,name)
+settle_output rescan-resize-while-gated
+exec stty rows 40 columns 100 < $spawn_out(slave,name)
+settle_output rescan-resize-restored
+send_key "\007\007\007"
+settle_output repeated-rescan-while-gated
+if {![file exists [file join $viewer_dir rescan-busy]]} { puts stderr "rescan lost busy state during resize"; stop_child; exit 1 }
 set f [open [file join $source scan-release] w]; close $f
 await rescanned-count {Rescanned: 3 issues}
 file delete -force [file join $source scan-gate]
 await rescanned-selection {PTY body ABC-11 version 1}
 await_help_state 0 post-rescan-settled
 settle_output before-post-rescan-refresh
+set scan_log [slurp [file join $tmp herdr.log]]
+if {[regexp -all {pane read source-pane --source visible} $scan_log] != 1} { puts stderr "repeated Ctrl-G queued duplicate scans"; stop_child; exit 1 }
+puts "ok - rescan survives resize and ignores repeated requests while the source read is gated"
 send_key "\022"
 await refreshed-preview {PTY body ABC-11 version 2}
 set viewer_dirs [glob -nocomplain -directory $state .viewer.*]

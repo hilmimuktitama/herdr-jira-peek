@@ -1,5 +1,5 @@
 #!/bin/sh
-# shellcheck disable=SC1007 # Empty UI state values are intentional.
+# shellcheck disable=SC1007,SC2329 # Empty state and trap cleanup are intentional.
 # shellcheck source=scripts/common.sh
 # Render the ordered, atomically published picker snapshot.
 set -eu
@@ -55,9 +55,24 @@ fi
 # when building issue rows, never to paint a prompt, header, or shortcut bar.
 . "$DIR/common.sh"
 mkdir -p "$state/failed"
-if [ "${1:-}" = snapshot ]; then out=$2; else out=; fi
+publish=0
+if [ "${1:-}" = publish ]; then
+  # Metadata and rescan workers may finish together. Serialize snapshot builds
+  # so an older build cannot overwrite a newer set of rows.
+  while ! mkdir "$state/snapshot-lock" 2>/dev/null; do
+    [ -d "$state" ] || exit 1
+    sleep 0.02
+  done
+  publish=1; out=$state/snapshot
+elif [ "${1:-}" = snapshot ]; then out=$2; else out=; fi
+tmp=
+rows_cleanup() {
+  rm -f "$tmp"
+  [ "$publish" -eq 0 ] || rmdir "$state/snapshot-lock" 2>/dev/null || true
+}
+trap rows_cleanup 0
+trap 'exit 1' 1 2 15
 tmp=$(mktemp "$state/.snapshot.XXXXXX") || exit 1
-trap 'rm -f "$tmp"' 0 1 2 15
 candidate_count=0
 key_width=$(awk 'length($0) > n { n=length($0) } END { if (n < 7) n=7; print n }' "$CANDIDATES_FILE")
 while IFS= read -r key || [ -n "$key" ]; do
@@ -75,5 +90,8 @@ while IFS= read -r key || [ -n "$key" ]; do
     printf '%s\t%-*s  %s%-18s%s\n' "$key" "$key_width" "$key" "${VIEWER_DIM:-}" "$placeholder" "${VIEWER_RESET:-}"
   fi
 done < "$CANDIDATES_FILE" > "$tmp"
-if [ -n "$out" ]; then mv "$tmp" "$out"; else cat "$tmp"; rm -f "$tmp"; fi
+if [ "$publish" -eq 1 ]; then
+  if cmp -s "$tmp" "$out"; then printf 'unchanged'; else mv "$tmp" "$out"; printf 'changed'; fi
+elif [ -n "$out" ]; then mv "$tmp" "$out"; else cat "$tmp"; fi
+rows_cleanup
 trap - 0 1 2 15

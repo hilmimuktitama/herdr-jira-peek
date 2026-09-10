@@ -739,9 +739,12 @@ scan_source() (
   scan_status=0
   "$HERDR" pane read "$scan_pane_arg" --source "$scan_source_arg" >"$scan_dir/raw" 2>/dev/null || scan_status=$?
   [ "$scan_status" -eq 0 ] || exit 2
-  grep -oE "$KEY_RE" "$scan_dir/raw" | while IFS= read -r scan_key; do
-    validate_key "$scan_key" && printf '%s\n' "$scan_key"
-  done | awk '{ a[n++]=$0 } END { for (i=n-1; i>=0; i--) if (!seen[a[i]]++) print a[i] }' >"$scan_dir/keys"
+  # Validate in one pass, not one shell/grep per occurrence in scrollback.
+  grep -oE "$KEY_RE" "$scan_dir/raw" \
+    | LC_ALL=C awk -v projects="$JIRA_PROJECTS" '
+      $0 !~ /[^ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-]/ && $0 ~ "^(" projects ")-[0-9]+$" { a[n++]=$0 }
+      END { for (i=n-1; i>=0; i--) if (!seen[a[i]]++) print a[i] }
+    ' >"$scan_dir/keys"
   cat "$scan_dir/keys"
   [ -s "$scan_dir/keys" ] && exit 0 || exit 1
 )

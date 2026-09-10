@@ -42,11 +42,20 @@ fi
 notify() {
   [ "${VIEWER_NOTIFY:-1}" = 1 ] && [ -n "${VIEWER_FZF_SOCKET:-}" ] && command -v curl >/dev/null 2>&1 || return 0
   (cd "${VIEWER_STATE_DIR:?}" || exit 0
+   published=$(sh "$DIR/viewer-rows.sh" publish) || exit 0
+   if [ "$published" = unchanged ]; then
+     # Metadata rescans do not invalidate detail. Only explicit Ctrl-R needs
+     # to rerender when the selected issue's row text is unchanged.
+     [ "$arg" = --refresh ] || exit 0
+     actions='refresh-preview'
+   else
+     actions='reload(cat "$VIEWER_STATE_DIR/snapshot")'
+   fi
    i=0; while [ ! -S "$VIEWER_FZF_SOCKET" ] && [ "$i" -lt 100 ]; do sleep 0.05; i=$((i + 1)); done
    [ -S "$VIEWER_FZF_SOCKET" ] || exit 0
    i=0
    while [ "$i" -lt 3 ]; do
-      curl -sS --max-time 1 --unix-socket "$VIEWER_FZF_SOCKET" -X POST http://localhost -d 'reload(sh "$DIR/viewer-rows.sh")+refresh-preview' >/dev/null 2>&1 && exit 0
+      curl -sS --max-time 1 --unix-socket "$VIEWER_FZF_SOCKET" -X POST http://localhost -d "$actions" >/dev/null 2>&1 && exit 0
      i=$((i + 1)); sleep 0.05
    done
   )
