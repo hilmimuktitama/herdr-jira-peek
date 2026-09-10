@@ -5,7 +5,7 @@ Plugin ID: `jira-peek`.
 
 The repository became public on 2026-09-07. Version `0.2.0` was published on
 2026-09-08 as the first versioned release; `0.1.0` was the development baseline.
-The latest release is `0.2.3`, published on 2026-09-08. This project has no
+The latest release is `0.2.4`, published on 2026-09-10. This project has no
 publish automation.
 
 ## Before making the repository public
@@ -52,6 +52,32 @@ The plugin now uses the neutral ID `jira-peek`. Existing users must follow
 old registration and action bindings. GitHub ownership is unchanged. The
 maintainer uses a GitHub noreply address for future commits from this checkout;
 previous public commit history has not been rewritten.
+
+## Version 0.2.4 release validation — 2026-09-10
+
+- [x] Run live-picker rescans in a dedicated worker, preserve scans across
+  resizing, ignore repeated requests while busy, and retain the intentional
+  opening notification. Keep unchanged snapshots from restarting previews.
+- [x] Validate scrollback keys in one pass. A local fictional sample with 4,002
+  key occurrences took about 12.1 seconds before the change and 0.12 seconds
+  after it. These are scan-helper measurements, not live Jira timings.
+- [x] Pass local shell syntax, manifest contract, ShellCheck 0.11.0, and the
+  complete runtime suite with real fzf/less/Expect PTY coverage on retry.
+  One local macOS rapid-resize check timed out; its cause remains undiagnosed,
+  and the passing retry does not establish a fix.
+- [x] Review the release diff for private data. Gitleaks 8.30.1 found no leaks
+  in the prospective tree or release commit. No screenshots or runtime data
+  were added; regression fixtures contain fictional issue data only.
+- [x] Verify Linux and macOS CI on release commit
+  `caef80029507a15096357cf258f4c64917e107b6`: both jobs passed in
+  [run 34454111594](https://github.com/hilmimuktitama/herdr-jira-peek/actions/runs/34454111594).
+- [x] Publish [v0.2.4](https://github.com/hilmimuktitama/herdr-jira-peek/releases/tag/v0.2.4)
+  from that commit and pin README installation to its full SHA with `--ref`.
+  The subsequent documentation commit records publication; it changes no runtime code.
+
+The source-terminal flicker reported when opening a Herdr split remains
+unresolved. This release does not claim a fix, and no live Jira account or
+existing user Herdr pane was used for validation.
 
 ## Version 0.2.3 release validation — 2026-09-08
 
