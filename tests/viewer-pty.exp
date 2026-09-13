@@ -322,7 +322,7 @@ settle_output before-preview-page-up
 send_key "\033\[5~"
 await preview-page-up {PTY body ABC-1 version 1}
 send_key "\033OP"
-await help-open {PgUp/PgDn or Ctrl-D/U scroll}
+await help-open {PgUp/PgDn scroll}
 await_help_state 1 initial-help-open
 send_key "\033OP"
 await help-closed {PTY body ABC-1 version 1}
@@ -367,6 +367,40 @@ send_key "\033\[B\033\[B\033\[B\033\[A\033\[A'ABC-11"
 await_selected_key ABC-11
 puts "measurement - navigation/filter burst saved final selection in [expr {[clock milliseconds] - $navigation_started}] ms"
 await filtered-preview {PTY body ABC-11 version 1}
+# Expand to three matches, then verify that another step at either edge stays
+# on the same issue regardless of how loaded metadata affects result ranking.
+send_key "\177"
+settle_output short-filter
+set boundary_keys {}
+foreach direction {"\033\[A" "\033\[B"} {
+  send_key "$direction$direction$direction"
+  settle_output filtered-boundary
+  set boundary_key [string trim [slurp [file join $state sources source-source-terminal key]]]
+  lappend boundary_keys $boundary_key
+  send_key $direction
+  settle_output past-filtered-boundary
+  await_selected_key $boundary_key
+}
+if {[lindex $boundary_keys 0] eq [lindex $boundary_keys 1]} { puts stderr "filtered navigation did not reach distinct boundaries"; stop_child; exit 1 }
+send_key "1"
+settle_output restore-single-result
+await_selected_key ABC-11
+puts "ok - $picker_layout short filtered list stops at both ends"
+# Clear at the end, beginning, and middle; then replace immediately. A partial
+# clear leaves text behind and cannot match the next exact fictional issue key.
+foreach cursor {"" "\001" "\001\033\[C\033\[C"} replacement {ABC-2 ABC-3 ABC-11} {
+  send_key "${cursor}\025'$replacement"
+  await_selected_key $replacement
+  settle_output replace-filter
+}
+# Clearing twice must keep the picker open and ready for a new query.
+send_key "\025\025'ABC-2"
+await_selected_key ABC-2
+settle_output clear-empty-filter
+send_key "\025'ABC-11"
+await_selected_key ABC-11
+settle_output restore-filter-after-clear
+puts "ok - $picker_layout Ctrl-U clears at every cursor position and keeps empty picker open"
 set feedback_base_layout [slurp [file join $viewer_dir ui-layout]]
 send_key "\031"
 await copied-key {Copied key}
@@ -387,7 +421,7 @@ await_feedback_clear browser-failure
 puts "ok - action success and failure expire without input and restore preview space"
 file delete -force $action_failure
 send_key "\033OP"
-await active-help {PgUp/PgDn or Ctrl-D/U scroll preview}
+await active-help {PgUp/PgDn scroll preview}
 set viewer_dir [lindex [glob -nocomplain -directory $state .viewer.*] 0]
 await_help_state 1 filtered-help-open
 send_key "\033OP"
@@ -406,7 +440,7 @@ await rescan-start-feedback {Rescanning source pane...}
 # Progress must be painted while the source read is still blocked.
 if {[file exists [file join $source scan-release]]} { puts stderr "scan was released before feedback"; stop_child; exit 1 }
 send_key "\033OP"
-await rescan-responsive-help {PgUp/PgDn or Ctrl-D/U scroll preview}
+await rescan-responsive-help {PgUp/PgDn scroll preview}
 send_key "\033OP"
 # Resizing used to replace the scan's bg-transform, cancel its process, and
 # leave Ctrl-G unbound. The scan must survive and still complete exactly once.

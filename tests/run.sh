@@ -252,6 +252,7 @@ write_fake herdr \
   '  awk -F "\t" -v workspace="$4" '\''BEGIN { printf "{\"result\":{\"panes\":["; first=1 } $3 == workspace { if (!first) printf ","; printf "{\"pane_id\":\"%s\",\"terminal_id\":\"%s\"}", $1, $2; first=0 } END { print "]}}" }'\'' "$HERDR_LIVE_PANES"' \
   '  exit 0' \
   'fi' \
+  'if [ "$1" = pane ] && [ "$2" = resize ]; then exit 1; fi' \
   'if [ "$1" = plugin ] && [ "$2" = pane ] && [ "$3" = open ]; then' \
   '  count=0' \
   '  [ -s "$HERDR_OPEN_COUNT" ] && count=$(sed -n "1p" "$HERDR_OPEN_COUNT")' \
@@ -1100,7 +1101,7 @@ wide_header=$(awk '$0 == "--header" { getline; print; exit }' "$FZF_ARGS_LOG")
 printf '%s\n' "$FZF_ARGS_LOG" >/dev/null
 mkdir -p "$TMP/help-state"
 modern_help=$(env VIEWER_STATE_DIR="$TMP/help-state" sh "$ROOT/scripts/viewer-rows.sh" help)
-for control in Up/Down Enter 'q back' Esc PgUp/PgDn Ctrl-D/U Ctrl-R Ctrl-G Ctrl-O Ctrl-Y Ctrl-L; do
+for control in Up/Down Enter 'q back' Esc PgUp/PgDn Ctrl-U Ctrl-W Ctrl-A/E Ctrl-D Ctrl-R Ctrl-G Ctrl-O Ctrl-Y Ctrl-L; do
   printf '%s\n' "$modern_help" | grep -Fq "$control" || fail "expanded picker help includes $control"
 done
 pass 'expanded picker help covers every control'
@@ -1110,28 +1111,24 @@ case "$modern_help" in
 esac
 rm -f "$TMP/help-state/ui-help"
 header_default=$(env VIEWER_STATE_DIR="$TMP/help-state" VIEWER_HAS_FOOTER=0 sh "$ROOT/scripts/viewer-rows.sh" header)
-case "$header_default" in *'Enter Read · Ctrl-G Rescan · F1 Help · Esc Close'*) pass 'compact header uses grouped middle dots' ;; *) fail 'compact header uses grouped middle dots' ;; esac
+case "$header_default" in *'Enter Read · Ctrl-U Clear · Ctrl-G Rescan · F1 Help · Esc Close'*) pass 'compact header uses grouped middle dots' ;; *) fail 'compact header uses grouped middle dots' ;; esac
 printf '%s\n' 'Refreshing' > "$TMP/help-state/ui-message"
 header_message=$(env VIEWER_STATE_DIR="$TMP/help-state" VIEWER_HAS_FOOTER=0 sh "$ROOT/scripts/viewer-rows.sh" header)
-case "$header_message" in *'Refreshing · F1 Help · Esc Close'*) pass 'ui-message header uses grouped middle dots' ;; *) fail 'ui-message header uses grouped middle dots' ;; esac
-for footer_width in 30 50 80; do
+case "$header_message" in *'Refreshing · Ctrl-U Clear · F1 Help · Esc Close'*) pass 'ui-message header uses grouped middle dots' ;; *) fail 'ui-message header uses grouped middle dots' ;; esac
+for footer_width in 12 23 24 30 33 34 50 62 63 80; do
   footer=$(env VIEWER_STATE_DIR="$TMP/help-state" FZF_COLUMNS="$footer_width" sh "$ROOT/scripts/viewer-rows.sh" footer)
-  case "$footer_width:$footer" in
-    30:*'F1 Help · Esc Close') : ;;
-    50:*'Enter Read · Ctrl-G Rescan · F1 Help · Esc Close') : ;;
-     80:*'Enter Read · Ctrl-G Rescan · PgUp/PgDn Scroll · F1 Help · Esc Close') : ;;
-    *) fail "footer middle-dot layout at width $footer_width" ;;
+  footer_controls=$(printf '%s\n' "$footer" | tail -n 1)
+  case "$footer_width:$footer_controls" in
+    12:'Ctrl-U Clear'|23:'Ctrl-U Clear') : ;;
+    24:'Ctrl-U Clear · Esc Close'|30:'Ctrl-U Clear · Esc Close'|33:'Ctrl-U Clear · Esc Close') : ;;
+    34:'Ctrl-U Clear · F1 Help · Esc Close'|50:'Ctrl-U Clear · F1 Help · Esc Close'|62:'Ctrl-U Clear · F1 Help · Esc Close') : ;;
+    63:'Enter Read · Ctrl-U Clear · Ctrl-G Rescan · F1 Help · Esc Close'|80:'Enter Read · Ctrl-U Clear · Ctrl-G Rescan · F1 Help · Esc Close') : ;;
+    *) fail "footer clear shortcut layout at width $footer_width" ;;
   esac
+  [ "$(printf '%s' "$footer_controls" | sed 's/·/./g' | wc -c | tr -d ' ')" -le "$footer_width" ] \
+    || fail "footer controls overflow width $footer_width"
 done
-pass 'responsive footer uses grouped middle dots'
-footer_47=$(env VIEWER_STATE_DIR="$TMP/help-state" FZF_COLUMNS=47 sh "$ROOT/scripts/viewer-rows.sh" footer)
-if printf '%s\n' "$footer_47" | awk 'NR == 2 && $0 == "F1 Help · Esc Close" { found=1 } END { exit !found }'; then
-  pass 'footer keeps compact layout at width 47'
-else
-  fail 'footer keeps compact layout at width 47'
-fi
-footer_48=$(env VIEWER_STATE_DIR="$TMP/help-state" FZF_COLUMNS=48 sh "$ROOT/scripts/viewer-rows.sh" footer)
-case "$footer_48" in *'Enter Read · Ctrl-G Rescan · F1 Help · Esc Close') pass 'footer uses medium layout at width 48' ;; *) fail 'footer uses medium layout at width 48' ;; esac
+pass 'responsive footer prioritizes clear filter and fits every width boundary'
 awk '$0 == "--footer" { footer=1 } $0 == "--info-command" { unexpected=1 } $0 == "--highlight-line" { highlight=1 } END { exit !(footer && highlight && !unexpected) }' "$FZF_ARGS_LOG" \
   && pass 'modern fzf options are enabled' || fail 'modern fzf options are enabled'
 awk '$0 == "--with-shell" { getline; if ($0 == "/bin/sh -c") found=1 } END { exit !found }' "$FZF_ARGS_LOG" \
@@ -1171,7 +1168,7 @@ feedback_ui layout > "$FEEDBACK_STATE/ui-layout"
 printf '%s\n' 'Opened browser' 1 > "$FEEDBACK_STATE/ui-message"
 feedback_clear=$(feedback_ui expire-message)
 case "$feedback_clear" in
-  *'change-footer[Enter Read · Ctrl-G Rescan'*"change-preview-window($feedback_layout)"*) : ;;
+  *'change-footer[Enter Read · Ctrl-U Clear · Ctrl-G Rescan'*"change-preview-window($feedback_layout)"*) : ;;
   *) fail 'expiry restores shortcut guide and preview space' ;;
 esac
 [ ! -e "$FEEDBACK_STATE/ui-message" ] && pass 'expiry clears action feedback' || fail 'expiry clears action feedback'
@@ -1662,7 +1659,7 @@ terminal_b=$(sed -n '2p' "$session_b/sources/source-terminal-source/viewer-pane"
 [ "$pane_b" != "$terminal_b" ] || fail 'viewer pane tracking stores pane ID separately'
 [ ! -f "$STATE/sources/source-terminal-source/viewer-pane" ] || fail 'viewer pane state is session scoped'
 pass 'socket-scoped viewer pane state'
-case "$(sed -n '$p' "$HERDR_LOG")" in
+case "$(grep 'plugin pane open ' "$HERDR_LOG")" in
   *'plugin pane open --plugin jira-peek --entrypoint viewer --placement split --target-pane link-source-pane'*'--direction right'*'--focus'*)
     pass 'link-click opens an explicit right-side split' ;;
   *) fail 'link-click opens an explicit right-side split' ;;
@@ -1801,11 +1798,15 @@ unset HERDR_PLUGIN_CONTEXT_JSON
 run sh "$ROOT/scripts/peek.sh" >/dev/null
 [ "$(sed -n '1p' "$STATE/sources/source-terminal-source/candidates")" = DEF-9 ] || fail 'peek selects newest pane key'
 [ "$(sed -n '1p' "$STATE/sources/source-terminal-source/key")" = DEF-9 ] || fail 'peek saves newest pane key'
-case "$(sed -n '$p' "$HERDR_LOG")" in
+case "$(grep 'plugin pane open ' "$HERDR_LOG")" in
   *'plugin pane open --plugin jira-peek --entrypoint viewer --placement split --target-pane focused-pane'*'--direction right'*'--focus'*)
 pass 'noninteractive peek opens adjacent split' ;;
   *) fail 'noninteractive peek opens adjacent split' ;;
 esac
+opened_viewer=$(sed -n '1p' "$STATE/sources/source-terminal-source/viewer-pane")
+[ "$(sed -n '$p' "$HERDR_LOG")" = "pane resize --pane $opened_viewer --direction right --amount 0" ] \
+  || fail 'startup geometry synchronization targets the new viewer with zero movement'
+pass 'startup geometry synchronization targets the new viewer and tolerates an unsupported request'
 awk '/notification show Opening Jira Peek.*--sound none/ { feedback=1 } /pane read/ { read_seen=1; if (!feedback) late=1 } END { exit !(feedback && read_seen && !late) }' "$HERDR_LOG" \
   || fail 'opening feedback precedes source scan'
 pass 'opening feedback precedes source scan even when notifications are unavailable'

@@ -18,12 +18,12 @@ if [ "${1:-}" = rescan-start ]; then
 fi
 if [ "${1:-}" = header ]; then
   if [ -e "$state/ui-help" ]; then
-     printf 'Up/Down choose \302\267 Type filters\nEnter full issue (q back) \302\267 Esc close\nPgUp/PgDn or Ctrl-D/U scroll preview\nCtrl-O browser \302\267 Ctrl-Y copy key \302\267 Ctrl-L copy link\nCtrl-G rescan \302\267 Ctrl-R refresh \302\267 F1 compact filter\n'
+     printf 'Up/Down choose \302\267 Type filters\nEnter full issue (q back) \302\267 Esc close\nCtrl-U clear filter \302\267 Ctrl-W delete word\nCtrl-A/E start/end of filter\nPgUp/PgDn scroll preview \302\267 Ctrl-D half page down\nCtrl-O browser \302\267 Ctrl-Y copy key \302\267 Ctrl-L copy link\nCtrl-G rescan \302\267 Ctrl-R refresh \302\267 F1 compact filter\n'
   elif [ "${VIEWER_HAS_FOOTER:-0}" = 0 ]; then
     if [ -s "$state/ui-message" ]; then
-       printf '%s \302\267 F1 Help \302\267 Esc Close\n' "$(sed -n '1p' "$state/ui-message")"
+       printf '%s \302\267 Ctrl-U Clear \302\267 F1 Help \302\267 Esc Close\n' "$(sed -n '1p' "$state/ui-message")"
     else
-       printf 'Enter Read \302\267 Ctrl-G Rescan \302\267 F1 Help \302\267 Esc Close\n'
+       printf 'Enter Read \302\267 Ctrl-U Clear \302\267 Ctrl-G Rescan \302\267 F1 Help \302\267 Esc Close\n'
     fi
   fi
   status_line
@@ -37,9 +37,10 @@ if [ "${1:-}" = footer ]; then
   cols=${FZF_COLUMNS:-${COLUMNS:-80}}
   case "$cols" in ''|*[!0-9]*) cols=80;; esac
   [ -s "$state/ui-message" ] && sed -n '1p' "$state/ui-message"
-   if [ "$cols" -lt 48 ]; then printf 'F1 Help \302\267 Esc Close';
-   elif [ "$cols" -lt 70 ]; then printf 'Enter Read \302\267 Ctrl-G Rescan \302\267 F1 Help \302\267 Esc Close';
-   else printf 'Enter Read \302\267 Ctrl-G Rescan \302\267 PgUp/PgDn Scroll \302\267 F1 Help \302\267 Esc Close'; fi
+  if [ "$cols" -lt 24 ]; then printf 'Ctrl-U Clear';
+  elif [ "$cols" -lt 34 ]; then printf 'Ctrl-U Clear \302\267 Esc Close';
+  elif [ "$cols" -lt 63 ]; then printf 'Ctrl-U Clear \302\267 F1 Help \302\267 Esc Close';
+  else printf 'Enter Read \302\267 Ctrl-U Clear \302\267 Ctrl-G Rescan \302\267 F1 Help \302\267 Esc Close'; fi
   exit 0
 fi
 if [ "${1:-}" = help ]; then

@@ -1018,6 +1018,11 @@ show() {
     die 'Herdr returned no valid viewer terminal ID'
   fi
   save_viewer_tracking "$opened_pane" "$opened_terminal"
+  # Herdr 0.9.0 can leave plugin panes at their estimated PTY size until the
+  # next input event, clipping the bottom rows. A zero-distance resize applies
+  # the client geometry without changing split ratios or sending picker input.
+  # Keep an already-open viewer usable if this compatibility request fails.
+  "$HERDR" pane resize --pane "$opened_pane" --direction right --amount 0 >/dev/null 2>&1 || true
 }
 
 # Run one metadata-only request for the keys listed in a file. The key file is

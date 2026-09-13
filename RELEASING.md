@@ -53,6 +53,30 @@ old registration and action bindings. GitHub ownership is unchanged. The
 maintainer uses a GitHub noreply address for future commits from this checkout;
 previous public commit history has not been rewritten.
 
+## Version 0.2.5 release validation — 2026-09-13
+
+- [x] Clear the whole filter with Ctrl-U from any cursor position, keep an empty
+  picker open, and prioritize the clear shortcut in narrow panes. Document
+  filter editing in F1 Help and retain PgUp/PgDn preview scrolling.
+- [x] Stop filtered issue navigation at both boundaries. Verify clearing,
+  replacement queries, and navigation in real fzf PTYs for both layouts.
+- [x] Synchronize new plugin pane geometry without moving the split divider.
+  Offline rendered-frame checks reproduced the clipped filter on Herdr 0.9.0
+  and confirmed the fix across repeated openings and short panes. Herdr 0.8.2
+  compatibility checks also passed. No existing user panes were used.
+- [x] Pass local shell syntax, manifest contract, ShellCheck 0.11.0, and the full
+  runtime suite with real fzf/less/Expect PTY coverage. The final fixture uses
+  unique replacement queries to avoid ambiguous prefix matches.
+- [x] Review the release diff for private data. Gitleaks 8.30.1 found no leaks
+  in the prospective release tree. No screenshots or runtime data were added;
+  regression fixtures contain fictional issue data only.
+- [ ] Verify Linux and macOS CI on the release commit.
+- [ ] Publish v0.2.5 and pin README installation to its full commit SHA.
+
+Cmd-A query selection and the previously reported source-terminal opening
+flicker remain outside this patch. Existing configuration remains compatible;
+close and reopen viewers after updating.
+
 ## Version 0.2.4 release validation — 2026-09-10
 
 - [x] Run live-picker rescans in a dedicated worker, preserve scans across

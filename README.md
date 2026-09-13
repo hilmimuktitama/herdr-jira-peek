@@ -139,7 +139,7 @@ alternative.
 - `clear-cache` removes only regular files directly inside this plugin's issue
   cache and preserves other state.
 
-The viewer is a responsive right-side split targeted at the action's source pane. It uses a compact filter prompt, a single result counter, and an essential footer that shortens at narrow widths. The quick guide highlights Ctrl-G Rescan for new source output; Ctrl-O remains in F1 Help. F1 expands the header controls without losing the query or selection. `PICKER_LAYOUT` chooses the original top-aligned list or a bottom-aligned list with the preview above it. Resizing recalculates the preview and restores it when space returns. With a
+The viewer is a responsive right-side split targeted at the action's source pane. It uses a compact filter prompt, a single result counter, and an essential footer that shortens at narrow widths. The quick guide prioritizes Ctrl-U Clear for replacing filters and shows Ctrl-G Rescan when space permits; Ctrl-O remains in F1 Help. F1 expands the header controls without losing the query or selection. `PICKER_LAYOUT` chooses the original top-aligned list or a bottom-aligned list with the preview above it. Resizing recalculates the preview and restores it when space returns. With a
 tracked viewer live for the current source, invoking `peek` toggles only that
 viewer closed instead of opening a duplicate. Each source terminal can have its
 own Peek, including sources in the same workspace or different workspaces.
@@ -372,14 +372,26 @@ The other action IDs are
 | --- | --- |
 | Up / Down | Choose an issue and update its preview |
 | Type | Filter by key, status, or summary |
+| Ctrl-U | Clear the entire filter; type to enter a replacement |
+| Ctrl-W | Delete the previous word in the filter |
+| Ctrl-A / Ctrl-E | Move to the beginning / end of the filter |
 | Enter | Read the selected issue full-screen; press `q` to return |
-| PgUp / PgDn, Ctrl-D / Ctrl-U | Scroll the preview |
+| PgUp / PgDn | Scroll the preview up / down |
+| Ctrl-D | Scroll the preview down half a page |
 | Ctrl-O | Open the issue in the browser |
 | Ctrl-Y | Copy the issue key |
 | Ctrl-L | Copy the issue link |
 | Ctrl-G | Rescan the original source terminal |
 | Ctrl-R | Remove the cached issue and refetch it |
 | Esc | Close the picker and its adjacent pane |
+
+Ctrl-U clears the whole filter even when the cursor is in the middle. On an
+empty filter it does nothing and keeps the picker open.
+
+Issue navigation stops at the first and last matching result, including when
+the list is filtered. It does not wrap around; preview scrolling is separate.
+On opening, Peek synchronizes the viewer's terminal size so Herdr 0.9.0 shows
+the bottom filter immediately. This leaves the split divider in place.
 
 Press **F1** to expand or collapse shortcut help above the filter; the shortcut
 bar remains under the list. The picker keeps the query and selection while help

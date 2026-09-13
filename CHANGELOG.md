@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.2.5 — 2026-09-13
+
+- Clear the entire filter with Ctrl-U, including from the middle of the query.
+  Prioritize the clear shortcut in narrow panes and document filter editing in
+  F1 Help. Preview scrolling remains on PgUp/PgDn; Ctrl-D scrolls down half a page.
+- Synchronize a newly opened viewer's terminal size with Herdr's pane geometry.
+  This prevents Herdr 0.9.0 from clipping the selected issue and bottom filter
+  until the first mouse or keyboard input, without moving the split divider.
+- Stop picker navigation at the first and last matching issue so short filtered
+  lists do not loop while scrolling. Keep preview scrolling unchanged.
+
 ## 0.2.4 — 2026-09-10
 
 - Run Ctrl-G rescans in a dedicated worker when the live picker connection is

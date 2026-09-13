@@ -304,7 +304,7 @@ fi
 fzf_status=0
 # shellcheck disable=SC2016
 if run_picker_chrome \
-  --ansi --cycle --layout="$picker_layout" --info=inline-right --no-separator --border=none \
+  --ansi --layout="$picker_layout" --info=inline-right --no-separator --border=none \
   --delimiter '\t' --with-nth 2 \
    --prompt "$prompt" --pointer '>' \
   --header "$header" \
@@ -320,7 +320,8 @@ if run_picker_chrome \
    --bind "$rescan_binding" \
    --bind "$load_binding" \
   --bind "$help_binding" \
-  --bind 'pgdn:preview-page-down,pgup:preview-page-up,ctrl-d:preview-half-page-down,ctrl-u:preview-half-page-up' \
+  --bind 'ctrl-u:clear-query' \
+  --bind 'pgdn:preview-page-down,pgup:preview-page-up,ctrl-d:preview-half-page-down' \
   --bind 'focus:transform(sh "$DIR/viewer-ui.sh" focus {1})' \
   --bind 'change:transform(if [ -s "$VIEWER_STATE_DIR/ui-message" ]; then sh "$DIR/viewer-ui.sh" dismiss-message; fi)' \
   --bind "$close_binding" \
