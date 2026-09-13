@@ -5,7 +5,7 @@ Plugin ID: `jira-peek`.
 
 The repository became public on 2026-09-07. Version `0.2.0` was published on
 2026-09-08 as the first versioned release; `0.1.0` was the development baseline.
-The latest release is `0.2.4`, published on 2026-09-10. This project has no
+The latest release is `0.2.5`, published on 2026-09-13. This project has no
 publish automation.
 
 ## Before making the repository public
@@ -68,10 +68,14 @@ previous public commit history has not been rewritten.
   runtime suite with real fzf/less/Expect PTY coverage. The final fixture uses
   unique replacement queries to avoid ambiguous prefix matches.
 - [x] Review the release diff for private data. Gitleaks 8.30.1 found no leaks
-  in the prospective release tree. No screenshots or runtime data were added;
-  regression fixtures contain fictional issue data only.
-- [ ] Verify Linux and macOS CI on the release commit.
-- [ ] Publish v0.2.5 and pin README installation to its full commit SHA.
+  in the prospective release tree and release commit. No screenshots or runtime
+  data were added; regression fixtures contain fictional issue data only.
+- [x] Verify Linux and macOS CI on release commit
+  `a51df695ca57917ea1bb7802c613de64b7394a4b`: both jobs passed in
+  [run 34764643748](https://github.com/hilmimuktitama/herdr-jira-peek/actions/runs/34764643748).
+- [x] Publish [v0.2.5](https://github.com/hilmimuktitama/herdr-jira-peek/releases/tag/v0.2.5)
+  from that commit and pin README installation to its full SHA with `--ref`.
+  The subsequent documentation commit records publication; it changes no runtime code.
 
 Cmd-A query selection and the previously reported source-terminal opening
 flicker remain outside this patch. Existing configuration remains compatible;
