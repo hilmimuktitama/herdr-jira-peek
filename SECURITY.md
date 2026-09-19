@@ -2,8 +2,9 @@
 
 Peek for Jira is an unofficial, unaffiliated community plugin for Jira Cloud.
 Jira and Atlassian are Atlassian trademarks. This plugin is MIT-licensed and
-does not manage credentials; Atlassian OAuth authentication is handled outside
-the plugin by the official TWG CLI.
+does not manage credentials. The default TWG backend uses Atlassian OAuth
+outside the plugin; the optional REST backend reads credentials from a private
+external netrc file.
 
 The optional `install-dependencies` action opens an interactive terminal and
 requires approval before running a package manager or Atlassian's TWG
@@ -11,7 +12,7 @@ installer. The latter is downloaded from Atlassian over HTTPS and executed
 with `--skip-login --skip-skills`; the upstream installer manages TWG files and
 may update shell PATH configuration. Installation runs locally with the user's
 permissions; Linux package managers may request sudo. Setup checks capture no
-credentials and discard TWG authentication diagnostics instead of printing them.
+credentials and discard backend authentication diagnostics instead of printing them.
 
 ## Reporting a vulnerability
 
@@ -28,9 +29,9 @@ credentials, tokens, and other sensitive data from the report.
 ## Jira data and local cache
 
 The plugin only reads Jira data. Its project allowlist limits the issue keys
-sent to TWG; it does not restrict TWG's OAuth permissions or redact the local
-terminal capture used to find keys. TWG authentication and organization
-permissions are managed separately; see [third-party notices](THIRD_PARTY_NOTICES.md).
+sent to the selected backend; it does not restrict backend permissions or
+redact the local terminal capture used to find keys. Authentication and
+organization permissions are managed separately; see [third-party notices](THIRD_PARTY_NOTICES.md).
 
 | Data | Storage and retention |
 | --- | --- |
@@ -44,6 +45,15 @@ Source selection and tracking are stored under the current session's
 viewer closes. The issue cache is shared across sources and sessions, so
 refreshing or clearing an issue affects that shared cache.
 
+The runtime stores a hashed connection marker and epoch, purges the flat cache
+when backend, site, account, or REST netrc context changes, and rejects stale
+viewer callbacks. Close viewers when changing connection settings so the UI
+uses one context consistently. Positive-TTL cache data cannot detect remote
+credential revocation without a request. Doctor verifies the connection without
+changing cache state; recognized auth failures during issue requests, including
+Ctrl-R, invalidate the cached connection.
+See the [connection lifecycle plan](docs/connection-lifecycle-plan.md).
+
 A refresh removes the selected cached issue before fetching a replacement.
 `clear-cache` removes only regular files directly inside the issue-cache
 directory. Neither it nor `CACHE_TTL_MIN=0` removes selection or bookkeeping
@@ -51,13 +61,13 @@ state, active viewer files, or every abandoned temporary file.
 
 ## Temporary data and interrupted processes
 
-Raw TWG responses and stderr are captured in private local files while a
+Raw backend responses and stderr are captured in private local files while a
 request runs. The scanner similarly captures the source pane's full output
-locally, but sends only validated issue keys to TWG. Normal exits and handled
+locally, but sends only validated issue keys to the selected backend. Normal exits and handled
 signals clean these temporary files.
 
 Forced termination, such as SIGKILL or a system crash, can bypass cleanup.
-Later runtime startup reaps recognized PID-stamped TWG fetch files once their
+Later runtime startup reaps recognized PID-stamped backend fetch files once their
 owner is gone, and abandoned viewer directories in the current Herdr session.
 It does not reap every temporary file type or every other session's viewer
 directory. In particular, `.scan.*` and `.scan-all.*` directories can remain
@@ -65,7 +75,7 @@ with pane text or extracted keys. The doctor's temporary
 `peek-for-jira-doctor.*` output file in the system temporary directory also
 has no startup reaper. Cache TTL is not a retention limit for these files.
 
-Persisted fetch diagnostics use fixed labels rather than arbitrary TWG text;
+Persisted fetch diagnostics use fixed labels rather than arbitrary backend text;
 obsolete diagnostic contents are purged at runtime startup. Diagnostic
 filenames can still identify issues. The `doctor` action never runs login/setup
 or prints captured TWG output.

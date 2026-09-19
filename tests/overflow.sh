@@ -25,6 +25,7 @@ esac
 EOF
 cat > "$tmp/bin/twg" <<'EOF'
 #!/bin/sh
+case " $* " in *' whoami '*) printf '%s\n' '{"accountId":"fictional-user"}'; exit 0 ;; esac
 printf '%s\n' "$*" >> "$OVERFLOW_TMP/requests"
 while [ "$1" != get ]; do shift; done
 shift

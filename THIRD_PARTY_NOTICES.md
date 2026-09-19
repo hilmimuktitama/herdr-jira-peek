@@ -32,6 +32,15 @@ Peek's read-only operations do not imply that the TWG OAuth connection is
 limited to read permissions. Organization settings control what TWG may
 request; the configured Jira user must also have access to the relevant data.
 
+## Jira Cloud REST API
+
+The optional `rest` backend calls Atlassian's Jira Cloud REST API with `curl`.
+It reads an email/API-token pair from the user's external mode-600 netrc file;
+the plugin does not store or print those credentials. Use the scopes required
+by the Atlassian app and the account's Jira permissions. See the [Jira Cloud
+REST API documentation](https://developer.atlassian.com/cloud/jira/platform/rest/v3/)
+and [API token guidance](https://support.atlassian.com/atlassian-account/docs/manage-api-tokens-for-your-atlassian-account/).
+
 ## Other runtime tools
 
 These tools are installed separately, rather than bundled with the plugin:
@@ -41,7 +50,7 @@ These tools are installed separately, rather than bundled with the plugin:
 | jq | JSON parsing and rendering | [Copyright and license notices](https://github.com/jqlang/jq/blob/master/COPYING) |
 | less | Full-screen issue reader | [Project and source distributions](https://www.greenwoodsoftware.com/less/download.html) |
 | fzf | Required searchable picker | [License](https://github.com/junegunn/fzf/blob/master/LICENSE) |
-| curl (optional) | Local socket notifications for progressive picker updates | [Copyright and license](https://curl.se/docs/copyright.html) |
+| curl | REST transport and local socket notifications for progressive picker updates | [Copyright and license](https://curl.se/docs/copyright.html) |
 
 Git, shell utilities, and browser/clipboard commands come from the user's
 system or package manager. Their installed distributions provide the relevant

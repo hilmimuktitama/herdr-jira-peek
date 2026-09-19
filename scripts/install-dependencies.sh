@@ -50,13 +50,41 @@ cleanup() { [ -z "$installer_file" ] || rm -f "$installer_file"; }
 trap cleanup 0
 trap 'exit 1' 1 2 15
 
-printf '%s\n' 'Peek for Jira dependencies: fzf, jq, less, and TWG CLI.'
-printf '%s\n' 'Each installation requires approval. TWG OAuth login remains a separate step.'
-for dependency in fzf jq less; do
+installer_config_file=${HERDR_PLUGIN_CONFIG_FILE:-${HERDR_PLUGIN_CONFIG_DIR:-${HERDR_PLUGIN_STATE_DIR:-${TMPDIR:-/tmp}/herdr-jira-peek}}/config.sh}
+installer_backend=$(configured_backend "$installer_config_file")
+printf 'Backend tools to install [twg/rest] (default %s): ' "$installer_backend"
+IFS= read -r installer_choice || exit 1
+[ -z "$installer_choice" ] || installer_backend=$installer_choice
+# The chosen backend may differ from the still-working active connection.
+export HERDR_PLUGIN_DEPENDENCY_BACKEND="$installer_backend"
+case "$installer_backend" in
+  twg|rest) ;;
+  *) printf '%s\n' 'JIRA_BACKEND must be twg or rest; no dependencies were installed.' >&2; exit 1 ;;
+esac
+installer_description='fzf, jq, less, and TWG CLI'
+if [ "$installer_backend" = rest ]; then installer_description='fzf, jq, less, and curl'; fi
+printf '%s\n' "Peek for Jira dependencies: $installer_description."
+if [ "$installer_backend" = rest ]; then
+  printf '%s\n' 'REST uses the private netrc configured in config.sh; no TWG calls or OAuth are required.'
+else
+  printf '%s\n' 'Each installation requires approval. TWG OAuth login remains a separate step.'
+fi
+install_dependencies='fzf jq less'
+[ "$installer_backend" = rest ] && install_dependencies="$install_dependencies curl"
+for dependency in $install_dependencies; do
   if ! command -v "$dependency" >/dev/null 2>&1; then
     install_package "$dependency"
   fi
 done
+
+[ "$installer_backend" = rest ] && {
+  dependency_status=0
+  check_dependencies || dependency_status=1
+  printf '\n%s\n' 'Ensure Herdr sees the updated PATH, then rerun Set up Peek for Jira and Check Peek for Jira.'
+  printf '%s' 'Press Enter to close this installer. '
+  IFS= read -r install_answer || true
+  exit "$dependency_status"
+}
 
 install_twg=${TWG_BIN_PATH:-twg}
 if ! command -v "$install_twg" >/dev/null 2>&1 || ! twg_version_supported "$install_twg"; then

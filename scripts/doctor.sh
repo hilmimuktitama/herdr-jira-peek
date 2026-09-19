@@ -5,6 +5,8 @@
 set -u
 umask 077
 . "$(dirname "$0")/dependencies.sh"
+# shellcheck source=scripts/jira-rest.sh
+. "$(dirname "$0")/jira-rest.sh"
 
 plugin_id=${HERDR_PLUGIN_ID:-jira-peek}
 config_dir=${HERDR_PLUGIN_CONFIG_DIR:-${HERDR_PLUGIN_STATE_DIR:-${TMPDIR:-/tmp}/herdr-jira-peek}}
@@ -13,6 +15,8 @@ state=${HERDR_PLUGIN_STATE_DIR:-${TMPDIR:-/tmp}/herdr-jira-peek}
 cache=$state/cache
 required_twg=$REQUIRED_TWG
 twg_bin=${TWG_BIN_PATH:-twg}
+curl_bin=${CURL_BIN_PATH:-curl}
+REST_CURL=$curl_bin
 failures=0
 warnings=0
 
@@ -34,7 +38,7 @@ decode_config_value() {
 }
 
 read_config() {
-  JIRA_BASE='' JIRA_SITE='' JIRA_PROJECTS='' CACHE_TTL_MIN='' MAX_CANDIDATES='' KEY_RE=''
+  JIRA_BASE='' JIRA_SITE='' JIRA_PROJECTS='' JIRA_BACKEND='' JIRA_NETRC_FILE='' JIRA_CLOUD_ID='' CACHE_TTL_MIN='' MAX_CANDIDATES='' KEY_RE=''
   PICKER_LAYOUT=bottom
   while IFS= read -r config_line || [ -n "$config_line" ]; do
     config_line=$(printf '%s\n' "$config_line" | sed 's/^[[:space:]]*//')
@@ -47,6 +51,18 @@ read_config() {
       JIRA_SITE=*)
         decode_config_value "${config_line#JIRA_SITE=}" || return 1
         JIRA_SITE=$config_value
+        ;;
+      JIRA_BACKEND=*)
+        decode_config_value "${config_line#JIRA_BACKEND=}" || return 1
+        JIRA_BACKEND=$config_value
+        ;;
+      JIRA_NETRC_FILE=*)
+        decode_config_value "${config_line#JIRA_NETRC_FILE=}" || return 1
+        JIRA_NETRC_FILE=$config_value
+        ;;
+      JIRA_CLOUD_ID=*)
+        decode_config_value "${config_line#JIRA_CLOUD_ID=}" || return 1
+        JIRA_CLOUD_ID=$config_value
         ;;
       JIRA_PROJECTS=*)
         decode_config_value "${config_line#JIRA_PROJECTS=}" || return 1
@@ -79,15 +95,18 @@ if [ -f "$config_file" ] && [ ! -L "$config_file" ] \
     ok 'config.sh contains only supported setting assignments'
   else
     fail 'config.sh must contain only supported quoted setting assignments'
-    JIRA_BASE='' JIRA_SITE='' JIRA_PROJECTS='' CACHE_TTL_MIN='' MAX_CANDIDATES='' KEY_RE=''
+    JIRA_BASE='' JIRA_SITE='' JIRA_PROJECTS='' JIRA_BACKEND='' JIRA_NETRC_FILE='' JIRA_CLOUD_ID='' CACHE_TTL_MIN='' MAX_CANDIDATES='' KEY_RE=''
   fi
 else
   fail "config is missing at $config_file; run the setup action"
-  JIRA_BASE='' JIRA_SITE='' JIRA_PROJECTS='' CACHE_TTL_MIN='' MAX_CANDIDATES='' KEY_RE=''
+  JIRA_BASE='' JIRA_SITE='' JIRA_PROJECTS='' JIRA_BACKEND='' JIRA_NETRC_FILE='' JIRA_CLOUD_ID='' CACHE_TTL_MIN='' MAX_CANDIDATES='' KEY_RE=''
 fi
 
 JIRA_BASE=${JIRA_BASE:-}
 JIRA_SITE=${JIRA_SITE:-}
+JIRA_BACKEND=${JIRA_BACKEND:-twg}
+JIRA_NETRC_FILE=${JIRA_NETRC_FILE:-}
+JIRA_CLOUD_ID=${JIRA_CLOUD_ID:-}
 JIRA_PROJECTS=${JIRA_PROJECTS:-}
 CACHE_TTL_MIN=${CACHE_TTL_MIN:-}
 MAX_CANDIDATES=${MAX_CANDIDATES:-}
@@ -108,12 +127,40 @@ case "$JIRA_BASE" in
   *) fail 'JIRA_BASE must be a bare HTTPS origin without credentials, path, query, or fragment' ;;
 esac
 
-case "$JIRA_SITE" in
-  ''|*[!ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789._:-]*)
-    fail 'JIRA_SITE is missing or contains unsafe characters (use an Atlassian site prefix or cloud ID)' ;;
-  *) ok 'JIRA_SITE is configured without exposing auth data' ;;
+case "$JIRA_BACKEND" in
+  twg|rest) ok "JIRA_BACKEND is valid ($JIRA_BACKEND)" ;;
+  *) fail 'JIRA_BACKEND must be twg or rest' ;;
 esac
 
+if [ "$JIRA_BACKEND" = rest ]; then
+  if [ -n "$JIRA_SITE" ]; then warn 'JIRA_SITE is ignored by the REST backend'; fi
+  case "$JIRA_NETRC_FILE" in
+    /*) ;;
+    *) fail 'JIRA_NETRC_FILE must be an absolute path to a private netrc file' ;;
+  esac
+  if [ -n "$JIRA_NETRC_FILE" ]; then
+    if [ -L "$JIRA_NETRC_FILE" ] || [ ! -f "$JIRA_NETRC_FILE" ]; then
+      fail 'JIRA_NETRC_FILE is missing or is not a regular private file'
+    elif rest_validate_netrc; then
+      ok 'JIRA_NETRC_FILE uses private permissions'
+    else
+      fail 'JIRA_NETRC_FILE must use owner-only permissions (mode 400 or 600)'
+    fi
+  else
+    fail 'JIRA_NETRC_FILE is required for the REST backend'
+  fi
+  if [ -n "$JIRA_CLOUD_ID" ]; then
+    case "$JIRA_CLOUD_ID" in *[!A-Za-z0-9_-]*) fail 'JIRA_CLOUD_ID contains unsafe characters' ;; *) ok 'JIRA_CLOUD_ID is configured' ;; esac
+  fi
+fi
+
+if [ "$JIRA_BACKEND" = twg ]; then
+  case "$JIRA_SITE" in
+    ''|*[!ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789._:-]*)
+      fail 'JIRA_SITE is missing or contains unsafe characters (use an Atlassian site prefix or cloud ID)' ;;
+    *) ok 'JIRA_SITE is configured without exposing auth data' ;;
+  esac
+fi
 if [ -n "$JIRA_PROJECTS" ] && printf '%s\n' "$JIRA_PROJECTS" | grep -Eq '^[A-Z][A-Z0-9_]*(\|[A-Z][A-Z0-9_]*)+$'; then
   ok 'JIRA_PROJECTS is an explicit narrow allowlist'
 elif [ -n "$JIRA_PROJECTS" ] && printf '%s\n' "$JIRA_PROJECTS" | grep -Eq '^[A-Z][A-Z0-9_]*$'; then
@@ -148,6 +195,7 @@ case "$PICKER_LAYOUT" in
   top|bottom) ok "PICKER_LAYOUT is valid ($PICKER_LAYOUT)" ;;
   *) fail 'PICKER_LAYOUT must be top or bottom' ;;
 esac
+rest_config_failures=$failures
 
 check_dir_mode() {
   check_dir=$1
@@ -173,6 +221,9 @@ check_dir_mode "$cache" 'issue cache directory'
 for dependency in jq grep sed awk find mktemp mkdir chmod mv; do
   command -v "$dependency" >/dev/null 2>&1 || fail "required dependency missing: $dependency"
 done
+if ! command -v sha256sum >/dev/null 2>&1 && ! command -v shasum >/dev/null 2>&1; then
+  fail 'SHA-256 tooling is required; install sha256sum or shasum'
+fi
 if command -v less >/dev/null 2>&1; then
   ok 'a pager is available'
 else
@@ -183,13 +234,42 @@ if command -v fzf >/dev/null 2>&1; then
 else
   fail 'fzf is required; install it with brew install fzf (macOS) or your Linux package manager, and make sure it is on the PATH used by Herdr'
 fi
-if command -v curl >/dev/null 2>&1; then ok 'curl is available for progressive picker updates'; else warn 'curl is optional; metadata loads in one batch before the picker starts'; fi
+if command -v "$curl_bin" >/dev/null 2>&1; then
+  ok 'curl is available for progressive picker updates'
+elif [ "$JIRA_BACKEND" = rest ]; then
+  fail 'curl is required for the REST backend'
+else
+  warn 'curl is optional; metadata loads in one batch before the picker starts'
+fi
 
 twg_tmp=$(mktemp "${TMPDIR:-/tmp}/peek-for-jira-doctor.XXXXXX" 2>/dev/null || true)
-cleanup() { [ -z "$twg_tmp" ] || rm -f "$twg_tmp"; }
+rest_probe_status=
+rest_probe_stderr=
+cleanup() {
+  [ -z "$twg_tmp" ] || rm -f "$twg_tmp"
+  [ -z "$rest_probe_status" ] || rm -f "$rest_probe_status"
+  [ -z "$rest_probe_stderr" ] || rm -f "$rest_probe_stderr"
+}
 trap cleanup 0 1 2 15
 twg_available=1
-if ! command -v "$twg_bin" >/dev/null 2>&1; then
+if [ "$JIRA_BACKEND" = rest ]; then
+  twg_available=0
+  if [ "$rest_config_failures" -eq 0 ] && rest_validate_auth && [ -n "$twg_tmp" ]; then
+    rest_probe_url=$(rest_origin)/rest/api/3/myself
+    rest_probe_status=$twg_tmp.status
+    rest_probe_stderr=$twg_tmp.stderr
+    if rest_get "$rest_probe_url" "$twg_tmp" "$rest_probe_status" "$rest_probe_stderr" \
+      && [ "$(sed -n '1p' "$rest_probe_status")" = 200 ] \
+      && jq -s -e 'length == 1 and (.[0] | type) == "object" and (.[0].accountId | type) == "string" and (.[0].accountId | length) > 0' "$twg_tmp" >/dev/null 2>&1; then
+      ok 'REST Jira authentication/connectivity check passed'
+    else
+      fail 'REST Jira authentication/connectivity check failed; verify JIRA_BASE, JIRA_CLOUD_ID, netrc permissions, and network access'
+    fi
+  else
+    warn 'REST connectivity probe skipped until curl and a readable private netrc file are configured'
+  fi
+fi
+if [ "$JIRA_BACKEND" = twg ] && ! command -v "$twg_bin" >/dev/null 2>&1; then
   if [ "$twg_bin" = twg ] && [ -n "${HOME:-}" ] \
     && [ -x "$HOME/.local/bin/twg" ]; then
     twg_bin=$HOME/.local/bin/twg
@@ -199,7 +279,7 @@ if ! command -v "$twg_bin" >/dev/null 2>&1; then
     fail "TWG CLI is missing; install the official Atlassian TWG CLI (>= $required_twg), ensure it is on PATH, then run \`twg setup\`"
   fi
 fi
-if [ "$twg_available" -eq 1 ]; then
+if [ "$JIRA_BACKEND" = twg ] && [ "$twg_available" -eq 1 ]; then
   if twg_version_supported "$twg_bin"; then
     ok "TWG CLI meets minimum version $required_twg"
   else
@@ -214,6 +294,13 @@ if [ "$twg_available" -eq 1 ]; then
   elif "$twg_bin" doctor -o json >"$twg_tmp" 2>&1; then
     ok 'TWG reports a configured authenticated session'
     twg_auth_ok=1
+    if "$twg_bin" --mode user --site "$JIRA_SITE" --output json whoami >"$twg_tmp" 2>/dev/null \
+      && jq -s -e 'length == 1 and ((.[0].data.user // .[0].data // .[0]).accountId | type == "string" and length > 0)' "$twg_tmp" >/dev/null 2>&1; then
+      ok 'TWG local account identity is available for cache isolation'
+    else
+      fail 'TWG local account identity is unavailable; verify twg setup'
+      twg_auth_ok=0
+    fi
   elif grep -Eiq '(timed?[ -]?out|network|connection|ECONN|ENOTFOUND|DNS)' "$twg_tmp" 2>/dev/null; then
     fail 'TWG could not complete its connectivity check; verify network access and retry'
   else

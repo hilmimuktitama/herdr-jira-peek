@@ -59,6 +59,7 @@ close $h
 exec chmod 700 [file join $bin herdr]
 set t [open [file join $bin twg] w]
 puts $t {#!/bin/sh
+case " $* " in *' whoami '*) printf '%s\n' '{"accountId":"fictional-user"}'; exit 0 ;; esac
 printf "%s\n" "$*" >> "$PTY_METADATA_LOG"
 case " $* " in
   *" --comments "*) : ;;

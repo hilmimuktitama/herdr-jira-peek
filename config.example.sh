@@ -2,15 +2,25 @@
 # shellcheck disable=SC2034 # These assignments are exported data for the runtime.
 # The setup action copies this file from $HERDR_PLUGIN_ROOT; it never copies
 # from the caller's current working directory.
-# TWG owns Atlassian OAuth authentication; never put a token or credential here.
 # Keep this file declarative: one supported NAME=value assignment per line.
 # Quote string values. It is parsed as data and never executed as shell code.
 
-# Jira Cloud browse origin, without a trailing slash. Required.
+# Backend is `twg` by default. Set `rest` to use Jira Cloud REST directly.
+JIRA_BACKEND='twg'
+
+# Jira Cloud browse origin, without a trailing slash. Required for both backends.
 JIRA_BASE='https://your-site.atlassian.net'
 
-# TWG's Atlassian site prefix (or bare cloud ID). Required for site checks.
+# TWG's Atlassian site prefix (or bare cloud ID). Required for the TWG backend.
 JIRA_SITE='your-site'
+
+# REST credentials live in an external netrc file, never in this config.
+# Use an absolute path to a mode-600 file containing the Jira API email/token.
+JIRA_NETRC_FILE=''
+
+# Optional Jira Cloud ID for the api.atlassian.com gateway. When empty, REST
+# requests use JIRA_BASE as the machine host.
+JIRA_CLOUD_ID=''
 
 # Keep this allowlist narrow. Add projects explicitly (for example ABC|DEF).
 JIRA_PROJECTS='ABC|DEF'

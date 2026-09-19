@@ -4,6 +4,13 @@
 set -eu
 DIR=${DIR:-$(CDPATH='' cd "${0%/*}" && pwd)}
 kind=${1:-}; key=${2:-}
+if [ -n "${VIEWER_CONNECTION_ID:-}" ] && { [ "$kind" = focus ] || [ "$kind" = queue-rescan ] || [ "$kind" = watch-messages ]; }; then
+  # shellcheck source=scripts/connection.sh
+  . "$DIR/connection.sh"
+  # shellcheck source=scripts/jira-rest.sh
+  . "$DIR/jira-rest.sh"
+  if [ "$kind" != watch-messages ]; then connection_local_current || { printf 'abort'; exit 0; }; fi
+fi
 if [ "$kind" = queue-rescan ]; then
   # Only enqueue on fzf's input loop. The viewer-owned worker survives resize
   # background transforms and keeps Herdr reads/configuration off this path.
@@ -43,8 +50,12 @@ if [ "$kind" = watch-messages ]; then
   # event loop clears feedback, so a queued expiry cannot erase a newer one.
   cd "$VIEWER_STATE_DIR"
   while [ -d "$VIEWER_STATE_DIR" ]; do
+    if [ -n "${VIEWER_CONNECTION_ID:-}" ] && ! connection_local_current; then
+      "${CURL_BIN_PATH:-curl}" -sS --max-time 1 --unix-socket "$VIEWER_FZF_SOCKET" -X POST http://localhost -d 'abort' >/dev/null 2>&1 || true
+      exit 0
+    fi
     if [ -s "$VIEWER_STATE_DIR/ui-message" ] && [ -S "$VIEWER_FZF_SOCKET" ] && message_expired; then
-      curl -sS --max-time 1 --unix-socket "$VIEWER_FZF_SOCKET" -X POST http://localhost \
+      "${CURL_BIN_PATH:-curl}" -sS --max-time 1 --unix-socket "$VIEWER_FZF_SOCKET" -X POST http://localhost \
         -d 'transform(sh "$DIR/viewer-ui.sh" expire-message)' >/dev/null 2>&1 || true
     fi
     sleep 0.25

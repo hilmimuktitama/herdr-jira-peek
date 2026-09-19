@@ -45,7 +45,11 @@ case "$1 $2" in
 esac
 FAKE
 printf '#!/bin/sh\nexit 0\n' > "$tmp/bin/fzf"
-cp "$tmp/bin/fzf" "$tmp/bin/twg"
+cat > "$tmp/bin/twg" <<'FAKE'
+#!/bin/sh
+case " $* " in *' whoami '*) printf '%s\n' '{"accountId":"fictional-user"}'; exit 0 ;; esac
+exit 0
+FAKE
 # shellcheck disable=SC2016 # Literal environment references belong to the fake CLI.
 printf '#!/bin/sh\nprintf "%%s\\n" "$*" > "$MULTI_ROOT/open-url"\n' > "$tmp/bin/open"
 cp "$tmp/bin/open" "$tmp/bin/xdg-open"

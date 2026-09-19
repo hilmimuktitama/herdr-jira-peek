@@ -91,6 +91,7 @@ while IFS= read -r key || [ -n "$key" ]; do
     printf '%s\t%-*s  %s%-18s%s\n' "$key" "$key_width" "$key" "${VIEWER_DIM:-}" "$placeholder" "${VIEWER_RESET:-}"
   fi
 done < "$CANDIDATES_FILE" > "$tmp"
+connection_assert_current || exit 1
 if [ "$publish" -eq 1 ]; then
   if cmp -s "$tmp" "$out"; then printf 'unchanged'; else mv "$tmp" "$out"; printf 'changed'; fi
 elif [ -n "$out" ]; then mv "$tmp" "$out"; else cat "$tmp"; fi

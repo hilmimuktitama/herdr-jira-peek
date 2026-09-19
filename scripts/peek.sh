@@ -4,7 +4,7 @@
 set -eu
 . "$(dirname "$0")/common.sh"
 require_fzf
-require_twg
+require_backend
 lock_acquire
 resolve_action_source
 check_legacy_viewer

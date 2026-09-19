@@ -1,6 +1,6 @@
 id = "jira-peek"
 name = "Peek for Jira"
-version = "0.2.5"
+version = "0.3.0"
 min_herdr_version = "0.8.2"
 description = "Read-only Jira Cloud previews from the current Herdr pane"
 platforms = ["macos", "linux"]
@@ -23,7 +23,7 @@ command = ["sh", "scripts/open-browser.sh"]
 id = "setup"
 title = "Set up Peek for Jira"
 contexts = ["workspace"]
-command = ["sh", "scripts/setup.sh"]
+command = ["sh", "scripts/setup-action.sh"]
 
 [[actions]]
 id = "install-dependencies"
@@ -42,6 +42,12 @@ id = "clear-cache"
 title = "Clear Peek for Jira cache"
 contexts = ["workspace"]
 command = ["sh", "scripts/clear-cache.sh"]
+
+[[panes]]
+id = "setup-wizard"
+title = "Set up Peek for Jira"
+placement = "split"
+command = ["sh", "scripts/setup-wizard.sh"]
 
 [[panes]]
 id = "viewer"

@@ -16,6 +16,7 @@ import pty
 import select
 import shutil
 import signal
+import subprocess
 import struct
 import tempfile
 import termios
@@ -65,16 +66,18 @@ def fixtures(base):
         "JIRA_PROJECTS='DEMO'\nCACHE_TTL_MIN=10\nMAX_CANDIDATES=20\n")
     (state / "candidates").write_text("\n".join(issue[0] for issue in ISSUES) + "\n")
     metadata = []
+    issue_payloads = []
     for key, summary, status, description, comment in ISSUES:
         issue = dict(key=key, summary=summary, status={"name": status},
                      assignee={"displayName": "Alex Example"}, updated="2026-09-08T09:30:00Z",
                      description=description, comments=[dict(author={"displayName": "Sam Sample"},
                      created="2026-09-08T10:15:00Z", body=comment)])
-        (state / "cache" / f"{key}.json").write_text(json.dumps(issue))
+        issue_payloads.append((key, issue))
         metadata.append(dict(input=key, ok=True, data=issue))
     (base / "metadata.json").write_text(json.dumps({"data": {"items": metadata}}))
     (bin_dir / "twg").write_text(
         '#!/bin/sh\ncase " $* " in\n'
+        '  *" whoami "*) printf \'%s\\n\' \'{"accountId":"fictional-user"}\'; exit 0;;\n'
         '  *" --fields "*) cat "$CAPTURE_FIXTURES/metadata.json"; exit 0;;\nesac\nexit 1\n')
     (bin_dir / "herdr").write_text("#!/bin/sh\nexit 1\n")
     for path in bin_dir.iterdir():
@@ -86,7 +89,14 @@ def fixtures(base):
                COLUMNS=str(COLS), LINES=str(ROWS), SHELL="/bin/sh",
                HERDR_PLUGIN_CONFIG_DIR=str(config), HERDR_PLUGIN_STATE_DIR=str(state),
                TWG_BIN_PATH=str(bin_dir / "twg"), HERDR_BIN_PATH=str(bin_dir / "herdr"),
-               CAPTURE_FIXTURES=str(base))
+               CAPTURE_FIXTURES=str(base), DIR=str(ROOT / "scripts"))
+    # Initialize the connection marker before seeding cache fixtures. The
+    # first runtime initialization purges legacy/unscoped cache entries.
+    subprocess.run(["sh", "-c", ". \"$1/scripts/common.sh\"", "sh", str(ROOT)],
+                   env=env, check=True, stdout=subprocess.DEVNULL,
+                   stderr=subprocess.DEVNULL)
+    for key, issue in issue_payloads:
+        (state / "cache" / f"{key}.json").write_text(json.dumps(issue))
     return env
 
 

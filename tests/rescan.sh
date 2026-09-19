@@ -6,6 +6,7 @@ tmp=$(mktemp -d "${TMPDIR:-/tmp}/jira-peek-rescan.XXXXXX"); trap 'rm -rf "$tmp"'
 mkdir -p "$tmp/bin" "$tmp/config" "$tmp/state"
 cat > "$tmp/bin/twg" <<'EOF'
 #!/bin/sh
+case " $* " in *' whoami '*) printf '%s\n' '{"accountId":"fictional-user"}'; exit 0 ;; esac
 printf '%s\n' "$*" >> "$TWG_LOG"
 exit 97
 EOF

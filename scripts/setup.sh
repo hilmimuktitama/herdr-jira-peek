@@ -21,6 +21,11 @@ if [ -L "$config_dir" ]; then
   printf '%s\n' 'Peek for Jira setup: refusing a symlinked config directory.' >&2
   exit 1
 fi
+state_dir=${HERDR_PLUGIN_STATE_DIR:-$config_dir}
+case "$state_dir" in ''|/|.) printf '%s\n' 'Peek for Jira setup: refusing an unsafe state directory.' >&2; exit 1 ;; esac
+[ ! -L "$state_dir" ] && [ ! -L "$state_dir/cache" ] || { printf '%s\n' 'Peek for Jira setup: refusing symlinked state or cache.' >&2; exit 1; }
+if [ -d "$config_dir" ]; then chmod 700 "$config_dir" || exit 1; fi
+mkdir -p "$state_dir/cache" && chmod 700 "$state_dir" "$state_dir/cache" || exit 1
 
 if [ -z "$plugin_root" ]; then
   printf '%s\n' "Peek for Jira setup: HERDR_PLUGIN_ROOT is unavailable." >&2
@@ -73,13 +78,31 @@ else
 fi
 
 setup_status=0
+setup_backend=$(configured_backend "$config_file")
 if ! check_dependencies; then
   setup_status=1
   printf '%s\n' 'Setup is incomplete. Select Install Peek for Jira dependencies to review and approve missing tool installations.'
-  printf '%s\n' 'If TWG is installed but unauthenticated, run twg setup yourself in a terminal; the plugin never starts OAuth.'
+  if [ "$setup_backend" = rest ]; then
+    printf '%s\n' 'REST uses the private netrc configured in config.sh; no TWG calls or OAuth are required.'
+  else
+    printf '%s\n' 'If TWG is installed but unauthenticated, run twg setup yourself in a terminal; the plugin never starts OAuth.'
+  fi
+fi
+# A copied template is useful documentation but is not a ready connection.
+if grep -Eq "^JIRA_BASE=['\"]https://your-site\.atlassian\.net['\"]$|^JIRA_BASE=['\"]your-site['\"]$" "$config_file"; then
+  setup_status=1
+  printf '%s\n' 'Setup is incomplete: replace the example Jira origin and project settings in config.sh.'
+fi
+if [ "$setup_status" -eq 0 ] && ! HERDR_PLUGIN_CONFIG_DIR="$config_dir" sh "$(dirname "$0")/doctor.sh" >/dev/null 2>&1; then
+  setup_status=1
+  printf '%s\n' 'Setup is incomplete: doctor could not validate the configured Jira connection.'
 fi
 printf '%s\n' 'Next steps:'
-printf '1. Edit %s and set JIRA_BASE, JIRA_SITE, and your narrow JIRA_PROJECTS allowlist.\n' "$config_file"
+if [ "$setup_backend" = rest ]; then
+  printf '1. Edit %s and set JIRA_BACKEND=rest, JIRA_BASE, JIRA_NETRC_FILE, and your narrow JIRA_PROJECTS allowlist.\n' "$config_file"
+else
+  printf '1. Edit %s and set JIRA_BASE, JIRA_SITE, and your narrow JIRA_PROJECTS allowlist.\n' "$config_file"
+fi
 printf '%s\n' "   Bottom layout is the default; optionally set PICKER_LAYOUT='top' for the original layout."
 printf '%s\n' '2. Resolve any dependency or authentication failures above, then rerun setup.'
 printf '%s\n' "3. Check the configuration and Jira access: herdr plugin action invoke --plugin $plugin_id doctor"

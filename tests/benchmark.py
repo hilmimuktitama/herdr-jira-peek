@@ -50,7 +50,7 @@ def main():
                           "state/sources/source-source-terminal"):
             (base / directory).mkdir(parents=True, exist_ok=True)
         fake_twg = base / "twg"
-        fake_twg.write_text("#!/bin/sh\nexit 97\n")
+        fake_twg.write_text("#!/bin/sh\ncase \" $* \" in *' whoami '*) printf '%s\\n' '{\"accountId\":\"fictional-user\"}'; exit 0 ;; esac\nexit 97\n")
         fake_twg.chmod(0o700)
         (base / "config/config.sh").write_text(
             'JIRA_BASE="https://jira.example.test"\nJIRA_SITE="jira-example"\n'
@@ -69,6 +69,13 @@ def main():
             "VIEWER_HAS_FOOTER": "1", "VIEWER_MODERN_FOOTER": "1", "NO_COLOR": "1",
             "DIR": str(scripts), "TWG_BIN_PATH": str(fake_twg),
         }
+        snapshot = subprocess.check_output(
+            ["sh", "-c", '. "$DIR/common.sh"; printf "%s\\n" "$CONNECTION_ID" "$CONNECTION_EPOCH" "$CONNECTION_CONFIG_DIGEST"'],
+            env=env, text=True).splitlines()
+        env.update(CONNECTION_ID=snapshot[0], VIEWER_CONNECTION_ID=snapshot[0],
+                   CONNECTION_EPOCH=snapshot[1], VIEWER_CONNECTION_EPOCH=snapshot[1],
+                   CONNECTION_CONFIG_DIGEST=snapshot[2], JIRA_BACKEND="twg",
+                   STATE=str(base / "state"), CONFIG_DIR=str(base / "config"))
         focus = ["open-browser.sh", "--select"] if args.legacy_focus else ["viewer-ui.sh", "focus"]
         commands = {
             "select": ["sh", str(scripts / focus[0]), focus[1], "ABC-1"],

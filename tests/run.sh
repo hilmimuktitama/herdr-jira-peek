@@ -151,6 +151,7 @@ write_fake() {
 
 write_fake twg \
   '#!/bin/sh' \
+  'case " $* " in *" whoami "*) printf "%s\\n" '\''{"accountId":"fictional-user"}'\''; exit 0 ;; esac' \
   'printf "%s\n" "$*" >> "$TWG_LOG"' \
   'printf "%s\n" "${JIRA_SITE:-}" >> "$TWG_SITE_LOG"' \
   'if [ "${1:-}" = --help ]; then' \
@@ -465,13 +466,13 @@ pass 'wrong-key and multiple-item data arrays rejected'
 
 BATCH_METADATA="$TMP/batch-metadata.json"
 printf '%s\n' '{"data":{"items":[{"input":"ABC-123","ok":true,"data":{"key":"ABC-123","summary":"Portable peek","status":{"name":"Done"}}},{"input":"DEF-9","ok":true,"data":{"key":"DEF-9","summary":"Other issue","status":{"name":"To Do"}}},{"input":"GHI-7","ok":false,"data":{"key":"GHI-7"}},{"input":"JKL-2","ok":true},{"input":"MNO-4","ok":true,"data":{"key":"WRONG-1"}},{"input":"PQR-5","ok":true,"data":[]},{"input":"STU-6","ok":true,"data":"bad"},"malformed",[]],"summary":{}}}' > "$BATCH_METADATA"
-if ! batch_rows=$(run sh -c '. "$1/scripts/common.sh"; metadata_row "$2" ABC-123; metadata_row "$2" DEF-9' sh "$ROOT" "$BATCH_METADATA"); then
+if ! batch_rows=$(run sh -c 'DIR="$1/scripts"; export DIR; . "$1/scripts/common.sh"; metadata_row "$2" ABC-123; metadata_row "$2" DEF-9' sh "$ROOT" "$BATCH_METADATA"); then
   fail 'batch metadata loads successful entries'
 fi
 batch_expected=$(printf 'ABC-123\tDone\tPortable peek\nDEF-9\tTo Do\tOther issue')
 [ "$batch_rows" = "$batch_expected" ] || fail 'batch metadata loads successful entries'
 for batch_key in GHI-7 JKL-2 MNO-4 PQR-5 STU-6; do
-  if run sh -c '. "$1/scripts/common.sh"; metadata_row "$2" "$3"' sh "$ROOT" "$BATCH_METADATA" "$batch_key" >/dev/null; then
+  if run sh -c 'DIR="$1/scripts"; export DIR; . "$1/scripts/common.sh"; metadata_row "$2" "$3"' sh "$ROOT" "$BATCH_METADATA" "$batch_key" >/dev/null; then
     fail "batch metadata rejects $batch_key"
   fi
 done
@@ -503,7 +504,7 @@ esac
 [ -s "$diag_file" ] || fail 'TWG failure diagnostic is retained'
 if grep -Fq 'plugin pane request denied' "$diag_file"; then fail 'raw diagnostic was persisted'; fi
 printf '%s\n' 'email person@example.com confidential-project opaque upstream failure' > "$diag_file"
-run_with_state "$DIAG_CONFIG" "$DIAG_STATE" sh -c '. "$1/scripts/common.sh"' legacy "$ROOT" \
+run_with_state "$DIAG_CONFIG" "$DIAG_STATE" sh -c 'DIR="$1/scripts"; export DIR; . "$1/scripts/common.sh"' legacy "$ROOT" \
   || fail 'legacy diagnostic purge startup'
 [ ! -e "$diag_file" ] || fail 'legacy diagnostic was not purged before fetch'
 legacy_output=$(run_with_state "$DIAG_CONFIG" "$DIAG_STATE" sh "$ROOT/scripts/render.sh" DEF-9 2>&1 || true)
@@ -523,7 +524,7 @@ printf '%s\n' 'email old@example.com confidential opaque' > "$PRIVACY_STATE/sess
 printf '%s\n' 'Jira request failed' > "$PRIVACY_STATE/fetch-errors/fetch-error-GHI-7"
 { printf '%s\n' 'Jira request failed'; printf '%s' 'opaque tail'; } > "$PRIVACY_STATE/fetch-errors/fetch-error-JKL-2"
 if ! env HERDR_PLUGIN_CONFIG_DIR="$PRIVACY_CONFIG" HERDR_PLUGIN_STATE_DIR="$PRIVACY_STATE" \
-  sh -c '. "$1/scripts/common.sh"' privacy "$ROOT" >/dev/null 2>&1; then
+  sh -c 'DIR="$1/scripts"; export DIR; . "$1/scripts/common.sh"' privacy "$ROOT" >/dev/null 2>&1; then
   fail 'normal diagnostic purge startup'
 fi
 [ ! -e "$PRIVACY_STATE/fetch-errors/fetch-error-ABC-123" ] || fail 'global raw diagnostic purge'
@@ -535,7 +536,7 @@ mkdir -p "$PRIVACY_EXTERNAL/fetch-errors"
 printf '%s\n' 'external raw sentinel' > "$PRIVACY_EXTERNAL/fetch-errors/fetch-error-MNO-4"
 ln -s "$PRIVACY_EXTERNAL" "$PRIVACY_STATE/session-linked"
 if env HERDR_SOCKET_PATH=privacy-current HERDR_PLUGIN_CONFIG_DIR="$PRIVACY_CONFIG" \
-  HERDR_PLUGIN_STATE_DIR="$PRIVACY_STATE" sh -c '. "$1/scripts/common.sh"' privacy "$ROOT" >/dev/null 2>&1; then
+  HERDR_PLUGIN_STATE_DIR="$PRIVACY_STATE" sh -c 'DIR="$1/scripts"; export DIR; . "$1/scripts/common.sh"' privacy "$ROOT" >/dev/null 2>&1; then
   fail 'symlinked session was accepted'
 fi
 [ -f "$PRIVACY_EXTERNAL/fetch-errors/fetch-error-MNO-4" ] || fail 'symlink target was modified'
@@ -649,7 +650,7 @@ if missing_twg_output=$(env PATH="$BIN:$ORIGINAL_PATH" \
 fi
 mv "$BIN/twg.fake" "$BIN/twg"
 case "$missing_twg_output" in
-  *'TWG CLI unavailable'*) pass 'missing TWG diagnostic' ;;
+  *'TWG CLI is required'*) pass 'missing TWG diagnostic' ;;
   *) fail 'missing TWG diagnostic' ;;
 esac
 [ ! -e "$MISSING_TWG_STATE/cache/DEF-9.json" ] \
@@ -746,7 +747,7 @@ race_wait=0
 while [ ! -f "$TWO_SESSION_STARTED" ] && [ "$race_wait" -lt 10 ]; do sleep 1; race_wait=$((race_wait + 1)); done
 [ -f "$TWO_SESSION_STARTED" ] || { kill "$two_session_pid" 2>/dev/null || true; fail 'two-session old response started'; }
 env HERDR_SOCKET_PATH=session-b HERDR_PLUGIN_CONFIG_DIR="$DIAG_CONFIG" \
-  HERDR_PLUGIN_STATE_DIR="$TWO_SESSION_STATE" sh -c '. "$1/scripts/common.sh"; clear_cache ABC-123' \
+  HERDR_PLUGIN_STATE_DIR="$TWO_SESSION_STATE" sh -c 'DIR="$1/scripts"; export DIR; . "$1/scripts/common.sh"; clear_cache ABC-123' \
   sh "$ROOT" || { : > "$TWO_SESSION_RELEASE"; wait "$two_session_pid" || true; fail 'two-session refresh invalidation'; }
 env HERDR_SOCKET_PATH=session-b HERDR_PLUGIN_CONFIG_DIR="$DIAG_CONFIG" \
   HERDR_PLUGIN_STATE_DIR="$TWO_SESSION_STATE" TWG_MODE=refresh-success \
@@ -826,7 +827,7 @@ printf '%s\n' abandoned > "$STALE_TEMP_STATE/.viewer.99999999.stale/metadata"
 printf '%s\n' active > "$STALE_TEMP_STATE/.viewer.$$.active/metadata"
 if ! env HERDR_PLUGIN_CONFIG_DIR="$STALE_TEMP_CONFIG" \
   HERDR_PLUGIN_STATE_DIR="$STALE_TEMP_STATE" \
-  sh -c '. "$1/scripts/common.sh"' peek-test "$ROOT"; then
+  sh -c 'DIR="$1/scripts"; export DIR; . "$1/scripts/common.sh"' peek-test "$ROOT"; then
   fail 'abandoned fetch work cleanup'
 fi
 [ ! -e "$STALE_TEMP_STATE/.twg-json.99999999.stale" ] \
@@ -852,7 +853,7 @@ printf '%s\n' untouched > "$ZERO_STATE/outside-cache"
 ln -s "$ZERO_STATE/outside-cache" "$ZERO_STATE/cache/link"
 printf '%s\n' nested > "$ZERO_STATE/cache/nested/keep"
 env HERDR_PLUGIN_CONFIG_DIR="$ZERO_CONFIG" HERDR_PLUGIN_STATE_DIR="$ZERO_STATE" \
-  sh -c '. "$1/scripts/common.sh"' peek-test "$ROOT" \
+  sh -c 'DIR="$1/scripts"; export DIR; . "$1/scripts/common.sh"' peek-test "$ROOT" \
   || fail 'flat cache purge invocation'
 [ ! -e "$ZERO_STATE/cache/direct.tmp" ] \
   && [ ! -e "$ZERO_STATE/cache/.hidden" ] \
@@ -1329,13 +1330,13 @@ unset FZF_STDERR
 
 NO_FZF_BIN="$TMP/no-fzf-bin"
 mkdir "$NO_FZF_BIN"
-for tool in env sh sed awk tr wc mktemp mkdir rmdir mv rm cp ps sleep jq less twg herdr cat grep find date dirname tee chmod cksum uname basename sort head cut readlink tput cmp; do
+for tool in env sh sed awk tr wc mktemp mkdir rmdir mv rm cp ps sleep jq less twg herdr cat grep find date dirname tee chmod cksum uname basename sort head cut readlink tput cmp shasum; do
   tool_path=$(command -v "$tool" 2>/dev/null || true)
   [ -n "$tool_path" ] && ln -s "$tool_path" "$NO_FZF_BIN/$tool"
 done
 NO_LESS_BIN="$TMP/no-less-bin"
 mkdir "$NO_LESS_BIN"
-for tool in env sh sed awk tr wc mktemp mkdir mv rm cp ps sleep jq twg cat grep find date dirname tee chmod cksum uname basename sort head cut readlink tput cmp; do
+for tool in env sh sed awk tr wc mktemp mkdir mv rm cp ps sleep jq twg cat grep find date dirname tee chmod cksum uname basename sort head cut readlink tput cmp shasum; do
   tool_path=$(command -v "$tool" 2>/dev/null || true)
   [ -n "$tool_path" ] && ln -s "$tool_path" "$NO_LESS_BIN/$tool"
 done
@@ -1379,6 +1380,7 @@ VIEWER_MANY_STATE="$TMP/viewer-many-state"
 VIEWER_MANY_BIN="$TMP/viewer-many-bin"
 mkdir -p "$VIEWER_MANY_CONFIG" "$VIEWER_MANY_STATE/cache" "$VIEWER_MANY_BIN"
 printf '%s\n' 'JIRA_BASE="https://jira.example.test"' 'JIRA_SITE="jira-example"' 'JIRA_PROJECTS="ABC"' 'CACHE_TTL_MIN=10' 'MAX_CANDIDATES=20' > "$VIEWER_MANY_CONFIG/config.sh"
+env HERDR_PLUGIN_CONFIG_DIR="$VIEWER_MANY_CONFIG" HERDR_PLUGIN_STATE_DIR="$VIEWER_MANY_STATE" DIR="$ROOT/scripts" sh -c '. "$DIR/common.sh"'
 : > "$VIEWER_MANY_STATE/candidates"
 i=1
 while [ "$i" -le 11 ]; do
@@ -1387,7 +1389,7 @@ while [ "$i" -le 11 ]; do
   printf '%s\n' "{\"key\":\"$key\",\"summary\":\"Synthetic $i\",\"status\":{\"name\":\"Done\"},\"description\":{\"type\":\"doc\",\"content\":[{\"type\":\"paragraph\",\"content\":[{\"type\":\"text\",\"text\":\"Body $i\"}]}]}}" > "$VIEWER_MANY_STATE/cache/$key.json"
   i=$((i + 1))
 done
-for tool in env sh sed awk tr wc mktemp mkdir rmdir mv rm cp ps sleep jq less twg herdr cat grep find date dirname tee chmod cksum uname basename sort head cut readlink tput cmp; do
+for tool in env sh sed awk tr wc mktemp mkdir rmdir mv rm cp ps sleep jq less twg herdr cat grep find date dirname tee chmod cksum uname basename sort head cut readlink tput cmp shasum; do
   [ "$tool" = twg ] && continue
   ln -s "$NO_FZF_BIN/$tool" "$VIEWER_MANY_BIN/$tool"
 done
@@ -1472,6 +1474,7 @@ fi
 VIEWER_TEST_STATE="$TMP/viewer-progress"
 mkdir -p "$VIEWER_TEST_STATE/rows"
 mkdir -p "$VIEWER_TEST_STATE/cache"
+env HERDR_PLUGIN_CONFIG_DIR="$CONFIG" HERDR_PLUGIN_STATE_DIR="$VIEWER_TEST_STATE" DIR="$ROOT/scripts" sh -c '. "$DIR/common.sh"'
 printf '%s\n' '{"key":"ABC-123","summary":"Portable peek","status":{"name":"Done"}}' > "$VIEWER_TEST_STATE/cache/ABC-123.json"
 printf '%s\n%s\n%s\n' ../../escape ABC-123 DEF-9 > "$VIEWER_TEST_STATE/candidates"
 printf '%s\n' 'escape\tescape  Blocked  must-not-render' > "$TMP/escape"
@@ -1520,6 +1523,7 @@ pass 'failed row preview reuses diagnostic'
 
 NONOBJECT_STATE="$TMP/viewer-nonobject"
 mkdir -p "$NONOBJECT_STATE/rows" "$NONOBJECT_STATE/failed" "$NONOBJECT_STATE/cache"
+env HERDR_PLUGIN_CONFIG_DIR="$CONFIG" HERDR_PLUGIN_STATE_DIR="$NONOBJECT_STATE" DIR="$ROOT/scripts" sh -c '. "$DIR/common.sh"'
 printf '%s\n' ABC-123 > "$NONOBJECT_STATE/candidates"
 printf '%s\n' '{"key":"ABC-123","status":"Done","summary":"Portable peek"}' > "$NONOBJECT_STATE/cache/ABC-123.json"
 env HERDR_PLUGIN_CONFIG_DIR="$CONFIG" HERDR_PLUGIN_STATE_DIR="$NONOBJECT_STATE" VIEWER_STATE_DIR="$NONOBJECT_STATE" sh "$ROOT/scripts/viewer-fetch.sh" ABC-123 || fail 'non-object status worker'
@@ -1551,13 +1555,13 @@ pass 'published preview refetches without durable TTL-zero issue data'
 printf '%s\n' \
   '{"key":"ABC-123","url":"https://jira.example.test/browse/ABC-123?source=test#fragment"}' \
   > "$STATE/cache/ABC-123.json"
-cached_url=$(run sh -c '. "$1/scripts/common.sh"; issue_url ABC-123' sh "$ROOT")
+cached_url=$(run sh -c 'DIR="$1/scripts"; export DIR; . "$1/scripts/common.sh"; issue_url ABC-123' sh "$ROOT")
 [ "$cached_url" = 'https://jira.example.test/browse/ABC-123?source=test#fragment' ] \
   || fail 'cached query-then-fragment URL accepted'
 printf '%s\n' \
   '{"key":"ABC-123","url":"https://jira.example.test/browse/ABC-123#fragment?value"}' \
   > "$STATE/cache/ABC-123.json"
-cached_url=$(run sh -c '. "$1/scripts/common.sh"; issue_url ABC-123' sh "$ROOT")
+cached_url=$(run sh -c 'DIR="$1/scripts"; export DIR; . "$1/scripts/common.sh"; issue_url ABC-123' sh "$ROOT")
 [ "$cached_url" = 'https://jira.example.test/browse/ABC-123#fragment?value' ] \
   || fail 'cached fragment-containing-query URL accepted'
 pass 'cached issue_url handles query and fragment order'
@@ -1917,5 +1921,8 @@ pass 'configured URL fallback'
 sh "$ROOT/tests/rescan.sh"
 OVERFLOW_REAL_FZF="$REAL_FZF_PATH" sh "$ROOT/tests/overflow.sh"
 sh "$ROOT/tests/multipane.sh"
+sh "$ROOT/tests/rest.sh"
+sh "$ROOT/tests/auth-lifecycle.sh"
+sh "$ROOT/tests/setup-wizard.sh"
 pass 'all runtime tests passed'
 printf 'all tests passed\n'

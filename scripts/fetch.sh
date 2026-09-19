@@ -16,6 +16,7 @@ trap 'cleanup; trap - 0; exit 1' 1 2 15
 
 if fetch "$key" >/dev/null; then
   f=$FETCHED_FILE
+  connection_assert_current || die 'Connection changed; retry with the current connection.'
   fetch_status=0
   jq -r '
     def row_text: tostring | gsub("[\u0000-\u001f\u007f-\u009f]"; " ");
@@ -26,6 +27,6 @@ if fetch "$key" >/dev/null; then
   trap - 0 1 2 15
   exit "$fetch_status"
 else
-  detail=$(fetch_error_detail "$key" 2>/dev/null || printf '%s' 'TWG request failed')
+  detail=$(fetch_error_detail "$key" 2>/dev/null || printf '%s' "$FETCH_ERROR_GENERIC")
   die "could not read $key: $detail"
 fi

@@ -92,15 +92,18 @@ alternative.
 
 ## Scope and privacy
 
-- This plugin targets Jira Cloud and only requests issue data through the
-  official Atlassian Teamwork Graph CLI (TWG) and its OAuth connection.
+- This plugin targets Jira Cloud. The default `twg` backend uses the official
+  Atlassian Teamwork Graph CLI and its OAuth connection; the optional `rest`
+  backend calls Jira Cloud REST directly.
 - Peek for Jira never creates, edits, transitions, comments on, or deletes Jira
   data. Opening a browser and copying a link are local user actions.
 - Scanning temporarily writes the source pane's output to private local files
   before extracting allowed issue keys. This can include unrelated terminal
-  content. The plugin sends only the extracted keys to TWG, not the pane text.
-- TWG authentication remains outside this plugin; do not add credentials to
-  `config.sh`. Requests temporarily store raw TWG responses and stderr locally.
+  content. The plugin sends only the extracted keys to the selected backend,
+  not the pane text.
+- Credentials remain outside this plugin config. TWG authentication is managed
+  by TWG; REST uses the configured private netrc file. Requests temporarily
+  store raw responses and stderr locally.
 - Full issue JSON can contain descriptions and comments. It is fetched lazily
   only for issues you preview. With the default positive TTL it is cached in
   Herdr's private plugin state; expired entries are deleted at runtime startup.
@@ -118,6 +121,40 @@ alternative.
   separately distributed tools and services with their own terms, availability,
   and privacy policies. See [third-party notices](THIRD_PARTY_NOTICES.md).
 
+## TWG usage and pricing (as of September 19, 2026)
+
+Peek uses the official Atlassian TWG CLI's Jira work-item lookup route. Its
+metadata request is equivalent to:
+
+```sh
+twg --mode user --api-version v2 --site YOUR_SITE --output json \
+  jira workitem get ISSUE-123 --fields summary,status,assignee,updated
+```
+
+When you preview an issue without a fresh cached copy, the plugin uses the same
+route with `--comments`:
+
+```sh
+twg --mode user --api-version v2 --site YOUR_SITE --output json \
+  jira workitem get ISSUE-123 --comments
+```
+
+At the date above, Atlassian's [TWG usage limits and billing
+policy](https://support.atlassian.com/rovo/docs/rovo-usage-limits/) describes
+ordinary single-product issue lookups as free, while enriched Teamwork Graph
+usage consumes credits. Extra-usage billing for Rovo credits starts December 3,
+2026. Atlassian's [beta command
+catalog](https://developer.atlassian.com/platform/teamwork-graph/twg-cli/commands/beta-commands-catalog/)
+labels `twg jira workitem get` (single or multiple work items) **Free**; Peek
+does not invoke enriched or cross-product lookup commands. This documents the
+current published policy and does not promise that Atlassian's pricing or
+catalog will remain unchanged. Ordinary API rate limits and service
+availability still apply separately.
+
+The optional REST backend keeps the plugin independent of future TWG or Rovo
+catalog and billing changes. It is a transport choice; direct REST still has
+Atlassian rate limits and permission requirements.
+
 ## Actions
 
 - `peek` scans visible output first, then recent-unwrapped output, putting the newest actual occurrence first within each source. All detected keys remain searchable and are globally de-duplicated; detection output is used only when neither source contains a key.
@@ -125,19 +162,19 @@ alternative.
 - `open-browser` opens the last issue selected for the focused source or Peek
   viewer in the system browser. A source with no selection reports that nothing
   has been peeked yet.
-- `setup` copies the public config template without overwriting an existing
-  file. It copies from Herdr's `HERDR_PLUGIN_ROOT`, never from the caller's
-  current directory, then checks required tools and TWG version/authentication.
-  Rerun it after installing dependencies or completing OAuth.
-- `install-dependencies` opens a terminal that asks for approval before each
-  missing package installation. It can install fzf, jq, and less with an
+- `setup` opens a backend-aware setup wizard. It stages a candidate config,
+  validates the selected connection, and atomically activates it only on
+  success; cancel or failure preserves the working config.
+- `install-dependencies` opens a terminal where you choose which backend to
+  prepare, then approve each missing package installation. This does not change
+  the active connection. It can install fzf, jq, less, and curl with an
   available Homebrew, APT, DNF, or Pacman, and TWG with Atlassian's installer.
-  It skips TWG login and agent-skill installation; complete OAuth yourself.
+  It skips TWG login and agent-skill installation; complete OAuth or REST netrc setup yourself.
 - `doctor` performs read-only checks for config, dependencies, private state,
-  TWG version/authentication, and the configured Jira Cloud site. It never
-  invokes `twg login` or `twg setup`.
+  selected backend and configured Jira Cloud site. It never invokes login/setup.
 - `clear-cache` removes only regular files directly inside this plugin's issue
-  cache and preserves other state.
+  cache and preserves other state. It also advances the connection epoch,
+  invalidating old viewers and pending requests.
 
 The viewer is a responsive right-side split targeted at the action's source pane. It uses a compact filter prompt, a single result counter, and an essential footer that shortens at narrow widths. The quick guide prioritizes Ctrl-U Clear for replacing filters and shows Ctrl-G Rescan when space permits; Ctrl-O remains in F1 Help. F1 expands the header controls without losing the query or selection. `PICKER_LAYOUT` chooses the original top-aligned list or a bottom-aligned list with the preview above it. Resizing recalculates the preview and restores it when space returns. With a
 tracked viewer live for the current source, invoking `peek` toggles only that
@@ -152,8 +189,10 @@ key, status, summary, and the formatted issue preview; descriptions and comments
 
 - [Herdr](https://herdr.dev/docs/install/) >= 0.8.2
 - The official Atlassian [TWG CLI](https://developer.atlassian.com/cloud/twg-cli/getting-started/installation/)
-  >= 1.2.6, authenticated with its Atlassian OAuth flow
+  >= 1.2.6, authenticated with its Atlassian OAuth flow (only for `twg`)
+- `curl` and a private mode-600 netrc file with Jira API credentials (only for `rest`)
 - `git` for installation; `jq`, `less`, a POSIX shell, and standard macOS/Linux utilities
+- SHA-256 hashing through `sha256sum` or `shasum` (normally included with the OS)
 - [`fzf`](https://github.com/junegunn/fzf#installation) is required for the picker
 - Progressive updates additionally use a recent fzf exposing
   `--listen-unsafe`, `--id-nth`, and `--track`, plus `curl`; older fzf or no
@@ -164,15 +203,15 @@ key, status, summary, and the formatted issue preview; descriptions and comments
 Install `fzf` with `brew install fzf` on macOS or `sudo apt install fzf` on
 Debian/Ubuntu; see its installation guide above for other platforms. The plugin
 uses the executable directly; fzf shell integration is not required. It must
-be on the `PATH` used by Herdr. Both `fzf` and `twg` are mandatory. You can
-install tools yourself or use the approval-based installation action below.
-If either is missing, doctor fails and the peek action reports installation
-instructions before opening a split.
+be on the `PATH` used by Herdr. `fzf` is always required, along with the selected
+backend's transport. REST never invokes TWG or silently falls back to it.
 
 ## Install and set up
 
 **Latest release:** [0.2.5](https://github.com/hilmimuktitama/herdr-jira-peek/releases/tag/v0.2.5).
 The command below installs the full reviewed commit SHA for this release.
+The dual-backend setup wizard and REST transport described here are part of
+the v0.3.0 release candidate; the installation pin will update on publication.
 
 With Herdr and git installed, install the plugin:
 
@@ -180,28 +219,36 @@ With Herdr and git installed, install the plugin:
 herdr plugin install hilmimuktitama/herdr-jira-peek --ref a51df695ca57917ea1bb7802c613de64b7394a4b
 ```
 
-1. Select **Set up Peek for Jira** from Herdr's plugin actions. It creates the
-   config template, preserves existing settings, and checks `fzf`, `jq`, `less`,
-   and TWG >= 1.2.6 with authentication/connectivity. Missing requirements
-   make setup fail with instructions; the config remains available to edit.
+1. Select **Set up Peek for Jira** from Herdr's plugin actions. The wizard
+   offers TWG or REST, preserves the current config until validation succeeds,
+   and checks `fzf`, `jq`, `less`, and the selected backend's tools. Missing
+   requirements or an invalid connection leave the working config unchanged.
 2. If tools are missing, select **Install Peek for Jira dependencies**. Review
    each proposed installation in its terminal and enter `y` to approve it.
    Declining installs nothing for that tool. No package manager is installed
    automatically; unsupported systems receive manual installation guidance.
-   The TWG installer is downloaded from Atlassian and run with `--skip-login`
-   and `--skip-skills`; it may update your shell's PATH.
-3. Complete [TWG's OAuth setup](https://developer.atlassian.com/cloud/twg-cli/getting-started/installation/)
-   yourself with `twg setup` in a terminal. Follow the installer's PATH guidance
-   and ensure the running Herdr process sees it; restart Herdr from an updated
-   shell if necessary. Rerun **Set up Peek for Jira** to check again.
+   For TWG, its installer is downloaded from Atlassian and run with `--skip-login`
+   and `--skip-skills`; it may update your shell's PATH. REST installs `curl`
+   if missing and skips TWG entirely.
+3. For TWG, complete [OAuth setup](https://developer.atlassian.com/cloud/twg-cli/getting-started/installation/)
+   yourself with `twg setup` in a terminal. For REST, follow the
+   [REST authentication steps](#rest-authentication) below. Rerun
+   **Set up Peek for Jira** to check again.
 4. Edit the config using the [configuration guide](#configure), then run
    **Check Peek for Jira** from Herdr's plugin actions.
 5. Once the check succeeds, focus a pane containing an allowed issue key and
    invoke **Peek for Jira issue from pane**. Add the [keybinding](#keybinding)
    for quicker access.
 
-TWG is required; the plugin has no direct API-token fallback. For local
-checkouts, see [contributor setup](CONTRIBUTING.md#local-development).
+TWG remains the backwards-compatible default. REST is an explicit backend
+choice; it never silently falls back to TWG. For local checkouts, see
+[contributor setup](CONTRIBUTING.md#local-development).
+Connection changes are staged and validated before activation; cancelled or
+failed setup keeps the last working configuration. Close and reopen viewers
+after changing backend, site, or credentials so workers use one connection
+consistently. The runtime fingerprints the connection, purges the flat cache
+when that context changes, and discards stale viewer responses. See the
+[connection lifecycle plan](docs/connection-lifecycle-plan.md).
 Maintainers should use the [release checklist](RELEASING.md).
 
 ## Update or remove
@@ -259,12 +306,15 @@ directory; do not confuse it with the new plugin's directory.
 
 ## Configure
 
-The setup action copies `config.example.sh` into the plugin config directory.
-Its safe starting point is deliberately narrow:
+The setup wizard uses `config.example.sh` as its safe starting point and writes
+only after the selected connection validates:
 
 ```sh
 JIRA_BASE='https://your-site.atlassian.net'
+JIRA_BACKEND='twg'
 JIRA_SITE='your-site'
+JIRA_NETRC_FILE=''
+JIRA_CLOUD_ID=''
 JIRA_PROJECTS='ABC|DEF'
 CACHE_TTL_MIN=10
 MAX_CANDIDATES=20
@@ -272,8 +322,11 @@ PICKER_LAYOUT='bottom'
 ```
 
 Set `JIRA_BASE` to a bare HTTPS origin with no context path, trailing slash,
-query, fragment, username, or password. `JIRA_SITE` is the Atlassian site
-prefix (or bare cloud ID) used by TWG. Keep `JIRA_PROJECTS` an explicit
+query, fragment, username, or password. `JIRA_BACKEND` is `twg` (the default)
+or `rest`. `JIRA_SITE` is required by TWG and ignored by REST. For REST, set
+`JIRA_NETRC_FILE` to an absolute path to a mode-600 netrc containing the Jira
+API email and token. Optionally set `JIRA_CLOUD_ID` to route through
+`api.atlassian.com`; otherwise REST uses `JIRA_BASE`. Keep `JIRA_PROJECTS` an explicit
 allowlist such as `ABC|DEF`; do not broaden it to every project unless you
 accept the privacy and preview-scope consequences. `KEY_RE` may optionally
 override the scan expression, but every detected key must still match
@@ -298,35 +351,84 @@ PICKER_LAYOUT='top'
 ```
 
 Find your configuration directory with `herdr plugin config-dir jira-peek`.
-Close and reopen Peek after changing the setting. Existing configurations that
-omit it use `bottom`; an explicit `top` choice is preserved. Setup preserves
-existing configuration files. Both layouts keep the same recency priority,
+Close and reopen Peek after changing the layout. Existing configurations that
+omit `PICKER_LAYOUT` use `bottom`; an explicit `top` choice is preserved. Setup
+preserves the working configuration when cancelled or unsuccessful. Both layouts keep the same recency priority,
 metadata preload order, search matching, and
 selection tracking across rescans. If the pane is too short, the preview hides
 to leave room for choosing issues and returns when space is available. The
 numbered fallback menu keeps its existing text layout.
 
-The config contains URL, site, project, candidate, cache, and layout preferences only.
-TWG owns OAuth and credential storage. Never put an API token, password,
-cookie, or other secret in this file. `config.sh` is parsed as data rather than
+The config contains backend, URL, site, project, credential-path, candidate,
+cache, and layout preferences only. Never put an API token, password, cookie,
+or other secret in this file. `config.sh` is parsed as data rather than
 executed: use one supported `NAME=value` assignment per line, quoting string
 values and putting comments on their own lines.
 
+### REST authentication
+
+Set these preferences in your private plugin `config.sh`:
+
+```sh
+JIRA_BACKEND='rest'
+JIRA_NETRC_FILE='/absolute/path/to/jira-peek.netrc'
+# Set this for a scoped API token; leave empty for an unscoped token.
+JIRA_CLOUD_ID='your-cloud-id'
+```
+
+Create the netrc file outside the repository with permissions `600` (or `400`).
+Use your editor to enter the account email and API token there. This fictional
+example shows the format for scoped tokens:
+
+```text
+machine api.atlassian.com
+login reader@example.test
+password REPLACE_WITH_API_TOKEN
+```
+
+For an unscoped token, leave `JIRA_CLOUD_ID` empty and use the hostname from
+`JIRA_BASE` as the netrc `machine`, without `https://` or a path. The config is
+parsed literally: use an absolute path, not `~` or `$HOME`. See Atlassian's
+[API token instructions](https://support.atlassian.com/atlassian-account/docs/manage-api-tokens-for-your-atlassian-account/)
+for creating scoped tokens and finding your cloud ID. The read endpoints use
+`read:jira-work`; the doctor's identity check also requires `read:jira-user`
+when using classic scopes. For granular scopes, follow each endpoint's
+[REST API reference](https://developer.atlassian.com/cloud/jira/platform/rest/v3/).
+
+Run **Check Peek for Jira** after configuring authentication. The picker,
+reader, comments, filtering, refresh, rescan, links, and cache controls work
+the same with either backend. Available data still depends on the selected
+account's permissions. REST errors never trigger a TWG fallback.
+
+Before changing backend, site, or account credentials, close all Peek viewers.
+The runtime detects the connection context, purges the flat cache, advances the
+epoch, and rejects stale responses. Then reopen Peek. **Clear Peek for Jira
+cache** remains available when credentials are revoked or unavailable.
+
+### Request behavior
+
 The picker first makes one metadata-only request for up to `MAX_CANDIDATES`
 recent keys (no descriptions or comments). It retains every detected key in the
-list, including keys outside that batch:
+list, including keys outside that batch. With TWG:
 
 ```sh
  twg --mode user --api-version v2 --site "$JIRA_SITE" --output json \
   jira workitem get KEY... --fields summary,status,assignee,updated
 ```
 
-When you preview an issue, the plugin makes the full direct-JSON request:
+When `JIRA_BACKEND='twg'`, preview uses the full direct-JSON request:
 
 ```sh
  twg --mode user --api-version v2 --site "$JIRA_SITE" --output json \
   jira workitem get KEY --comments
 ```
+
+When `JIRA_BACKEND='rest'`, the equivalent metadata and detail requests use
+Jira Cloud REST with `curl --netrc-file "$JIRA_NETRC_FILE"`. A cloud ID routes
+through `https://api.atlassian.com/ex/jira/ID`; otherwise the configured
+`JIRA_BASE` host is used. REST never invokes TWG or silently falls back to it.
+Metadata uses the read-only bulk-fetch endpoint; previews fetch issue fields
+and follow comment pagination before caching the result.
 
 TWG output is normalized only when it is one JSON document. Full detail accepts
 only a bare object, a `data` object, or a single-item `data` array whose key
@@ -441,9 +543,10 @@ terminal scrollback limits can prevent recovery of older output.
 
 - **Doctor says config is missing:** select **Set up Peek for Jira**, then edit
   the copied template. Setup preserves an existing file and rechecks dependencies.
-- **Doctor says TWG is missing, old, or unauthenticated:** install the official
-  TWG CLI, then run `twg setup` yourself and rerun the doctor action. Doctor
-  never runs setup and never prints auth output.
+- **Doctor says the selected backend is unavailable or unauthenticated:** for
+  TWG, install the official CLI and run `twg setup`; for REST, install `curl`
+  and verify the absolute mode-600 `JIRA_NETRC_FILE`. Rerun doctor; it never
+  runs login/setup or prints auth output.
 - **TWG is authenticated but site access or requests fail:** confirm `JIRA_SITE`
   and your Jira access. Your organization may restrict TWG OAuth permissions
   or request IP locations. Follow [Atlassian's permission guidance](https://developer.atlassian.com/cloud/twg-cli/getting-started/configure-permissions/)

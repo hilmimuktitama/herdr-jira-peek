@@ -53,6 +53,27 @@ old registration and action bindings. GitHub ownership is unchanged. The
 maintainer uses a GitHub noreply address for future commits from this checkout;
 previous public commit history has not been rewritten.
 
+## Version 0.3.0 release validation — 2026-09-19
+
+- [x] Retain TWG as the compatible default and add explicit Jira Cloud REST
+  authentication through a private external netrc file, with shared viewer
+  behavior and no automatic backend fallback.
+- [x] Review setup cancellation/failure, backend and account switching,
+  credential rotation, stale workers, cache clearing, and observed auth rejection.
+  Use fictional fixtures only; no live Jira account was accessed.
+- [x] Pass local shell syntax, manifest contract, ShellCheck 0.11.0, and the full
+  runtime suite with real fzf/less/Expect coverage for both picker layouts.
+- [x] Review the prospective public tree and scan with Gitleaks 8.30.1. No
+  leaks were found, and no screenshots or runtime data were added.
+- [ ] Verify Linux and macOS CI on the release commit.
+- [ ] Publish v0.3.0 and pin README installation to its full release SHA.
+
+Close existing viewers before updating or changing authentication. Existing TWG
+configuration remains compatible. With a positive cache TTL, remote revocation
+is detected on a subsequent request; clear the cache for immediate local removal.
+The historical intermittent macOS PTY timing limitation remains undiagnosed;
+this release's passing run does not establish a fix.
+
 ## Version 0.2.5 release validation — 2026-09-13
 
 - [x] Clear the whole filter with Ctrl-U from any cursor position, keep an empty

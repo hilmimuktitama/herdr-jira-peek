@@ -18,7 +18,7 @@ if [ "$viewer_preview" -eq 1 ] && [ -n "${VIEWER_STATE_DIR:-}" ]; then
       exit 0
     fi
   elif [ -e "$VIEWER_STATE_DIR/failed/$key" ]; then
-    detail=$(fetch_error_detail "$key" 2>/dev/null || printf '%s' 'TWG request failed')
+    detail=$(fetch_error_detail "$key" 2>/dev/null || printf '%s' "$FETCH_ERROR_GENERIC")
     printf 'Could not load %s: %s\n' "$key" "$detail"
     exit 1
   fi
@@ -32,13 +32,14 @@ trap cleanup 0
 trap 'cleanup; trap - 0; exit 1' 1 2 15
 
 if [ "${JIRA_PEEK_RENDER_PUBLISHED:-}" = 1 ] \
-  && [ -s "$CACHE/$key.json" ] \
+  && [ -s "$CACHE/$key.json" ] && [ ! -L "$CACHE/$key.json" ] \
   && jq -s -e --arg requested_key "$key" 'length == 1 and (.[0] | type) == "object" and .[0].key == $requested_key' "$CACHE/$key.json" >/dev/null 2>&1; then
   f=$CACHE/$key.json
 elif fetch "$key" >/dev/null; then
   f=$FETCHED_FILE
 else
-  detail=$(fetch_error_detail "$key" 2>/dev/null || printf '%s' 'TWG request failed')
+  detail=$(fetch_error_detail "$key" 2>/dev/null || printf '%s' "$FETCH_ERROR_GENERIC")
+  if [ "$JIRA_BACKEND" = rest ]; then die "Jira could not read $key: $detail"; fi
   die "TWG could not read $key: $detail"
 fi
 # FZF_PREVIEW_COLUMNS is the useful width when this is a preview. COLUMNS and
@@ -86,6 +87,7 @@ if ! rendered=$(jq -r --arg url "$canonical_url" --argjson preview "$preview" \
   -f "$RENDER_JQ" "$f" 2>/dev/null); then
   die 'could not render issue content'
 fi
+connection_assert_current || die 'Connection changed; close and reopen Peek.'
 printf '%s\n' "$rendered" | LC_ALL=C awk -v width="$wrap_width" -v color="$color" \
      -v bold="$bold" -v reset="$reset" '
    function display_length(text,    i, ch, total, advance) {

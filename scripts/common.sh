@@ -4,6 +4,7 @@ umask 077
 
 HERDR="${HERDR_BIN_PATH:-herdr}"
 TWG="${TWG_BIN_PATH:-twg}"
+DIR=${DIR:-$(CDPATH='' cd "$(dirname "${0:-scripts/common.sh}")" 2>/dev/null && pwd)}
 STATE="${HERDR_PLUGIN_STATE_DIR:-${TMPDIR:-/tmp}/herdr-jira-peek}"
 CONFIG_DIR="${HERDR_PLUGIN_CONFIG_DIR:-$STATE}"
 CACHE="$STATE/cache"
@@ -17,7 +18,11 @@ require_fzf() {
   command -v fzf >/dev/null 2>&1 || die 'fzf is required; install it with brew install fzf (macOS) or your Linux package manager, and make sure it is on the PATH used by Herdr. Then rerun the doctor action.'
 }
 
-require_twg() {
+require_backend() {
+  if [ "$JIRA_BACKEND" = rest ]; then
+    command -v "${CURL_BIN_PATH:-curl}" >/dev/null 2>&1 || die 'curl is required for the REST backend; install curl and rerun the doctor action.'
+    return 0
+  fi
   command -v "$TWG" >/dev/null 2>&1 || die 'TWG CLI is required; run the setup action for dependency installation instructions, then complete twg setup yourself in a terminal.'
 }
 
@@ -27,9 +32,12 @@ action_feedback() {
   "$HERDR" notification show "$1" --body "$2" --sound none >/dev/null 2>&1 || true
 }
 
-# Public defaults. Authentication belongs to TWG, not this plugin config.
+# Public defaults. Credentials live outside this plugin config.
 JIRA_BASE=
 JIRA_SITE=
+JIRA_BACKEND=twg
+JIRA_CLOUD_ID=
+JIRA_NETRC_FILE=
 JIRA_PROJECTS=
 CACHE_TTL_MIN=10
 MAX_CANDIDATES=20
@@ -76,6 +84,18 @@ load_config() {
         decode_config_value "${config_line#JIRA_SITE=}" || die 'invalid JIRA_SITE assignment in config.sh'
         JIRA_SITE=$config_value
         ;;
+      JIRA_BACKEND=*)
+        decode_config_value "${config_line#JIRA_BACKEND=}" || die 'invalid JIRA_BACKEND assignment in config.sh'
+        JIRA_BACKEND=$config_value
+        ;;
+      JIRA_CLOUD_ID=*)
+        decode_config_value "${config_line#JIRA_CLOUD_ID=}" || die 'invalid JIRA_CLOUD_ID assignment in config.sh'
+        JIRA_CLOUD_ID=$config_value
+        ;;
+      JIRA_NETRC_FILE=*)
+        decode_config_value "${config_line#JIRA_NETRC_FILE=}" || die 'invalid JIRA_NETRC_FILE assignment in config.sh'
+        JIRA_NETRC_FILE=$config_value
+        ;;
       JIRA_PROJECTS=*)
         decode_config_value "${config_line#JIRA_PROJECTS=}" || die 'invalid JIRA_PROJECTS assignment in config.sh'
         JIRA_PROJECTS=$config_value
@@ -101,7 +121,11 @@ load_config() {
   done < "$config_file"
 }
 
+# shellcheck source=scripts/connection.sh
+. "$DIR/connection.sh"
+CONNECTION_CONFIG_DIGEST=$(connection_config_hash) || die 'could not fingerprint config; SHA-256 tooling is required'
 load_config
+[ "$(connection_config_hash)" = "$CONNECTION_CONFIG_DIGEST" ] || die 'configuration changed while loading; retry'
 
 JIRA_BASE=${JIRA_BASE:-}
 while [ "${JIRA_BASE%/}" != "$JIRA_BASE" ]; do
@@ -115,12 +139,20 @@ esac
 printf '%s\n' "$JIRA_BASE" | grep -Eq '^https://(\[[0-9A-Fa-f:.]+\]|[A-Za-z0-9.-]+)(:[0-9]+)?$' \
   || die 'JIRA_BASE must be a bare HTTPS origin without credentials, path, query, or fragment'
 
-[ -n "${JIRA_SITE:-}" ] || die 'JIRA_SITE is required in config.sh'
-case "$JIRA_SITE" in
-  *[!ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789._:-]*)
-    die 'JIRA_SITE must be an Atlassian site prefix or bare cloud ID'
-    ;;
-esac
+case "$JIRA_BACKEND" in twg|rest) ;; *) die 'JIRA_BACKEND must be twg or rest' ;; esac
+if [ "$JIRA_BACKEND" = twg ]; then
+  [ -n "${JIRA_SITE:-}" ] || die 'JIRA_SITE is required in config.sh for the TWG backend'
+  case "$JIRA_SITE" in *[!ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789._:-]*) die 'JIRA_SITE must be an Atlassian site prefix or bare cloud ID' ;; esac
+else
+  [ -n "${JIRA_NETRC_FILE:-}" ] || die 'JIRA_NETRC_FILE is required in config.sh for the REST backend'
+  case "$JIRA_NETRC_FILE" in /*) ;; *) die 'JIRA_NETRC_FILE must be an absolute path' ;; esac
+  [ ! -L "$JIRA_NETRC_FILE" ] || die 'JIRA_NETRC_FILE must not be a symlink'
+  [ -f "$JIRA_NETRC_FILE" ] || die 'JIRA_NETRC_FILE must be a regular file'
+  # shellcheck source=scripts/jira-rest.sh
+  . "$DIR/jira-rest.sh"
+  rest_validate_netrc || die 'JIRA_NETRC_FILE must be owner-readable and inaccessible to group/world (mode 400 or 600)'
+  case "$JIRA_CLOUD_ID" in *[!A-Za-z0-9_-]*) die 'JIRA_CLOUD_ID contains unsafe characters' ;; esac
+fi
 
 [ -n "${JIRA_PROJECTS:-}" ] || die 'JIRA_PROJECTS must not be empty'
 printf '%s\n' "$JIRA_PROJECTS" \
@@ -187,11 +219,23 @@ cleanup_abandoned_temps() {
   done
 }
 cleanup_abandoned_temps \
+  "$STATE"/.identity.*.* \
   "$STATE"/.twg-json.*.* \
   "$STATE"/.twg-stderr.*.* \
   "$STATE"/.twg-normalized.*.* \
   "$STATE"/.twg-error.*.* \
   "$STATE"/.issue-*.*.*
+
+connection_cleanup_abandoned
+
+for stale_rest_dir in "$STATE"/.rest-fetch.*.* "$STATE"/.rest-metadata.*.*; do
+  [ -d "$stale_rest_dir" ] && [ ! -L "$stale_rest_dir" ] || continue
+  stale_rest_owner=${stale_rest_dir%.*}; stale_rest_owner=${stale_rest_owner##*.}
+  case "$stale_rest_owner" in ''|0|*[!0-9]*) continue ;; esac
+  if ! kill -0 "$stale_rest_owner" 2>/dev/null; then
+    rm -rf "$stale_rest_dir" || die 'could not remove abandoned REST request data'
+  fi
+done
 
 # Purge on every invocation, not only when a particular key is requested. This
 # also removes interrupted fetches and makes TTL=0 a true no-durable-cache mode.
@@ -331,6 +375,14 @@ FETCH_ERROR_GENERIC='TWG request failed'
 FETCH_ERROR_TWG='TWG is not authenticated or configured; run twg setup, then retry'
 FETCH_ERROR_JIRA='Jira request failed'
 FETCH_ERROR_MISSING='TWG CLI unavailable; install the official Atlassian TWG CLI, ensure it is on PATH, then run twg setup'
+if [ "$JIRA_BACKEND" = rest ]; then
+  FETCH_ERROR_GENERIC='Jira request failed'
+  FETCH_ERROR_MISSING='curl is unavailable; install curl and retry'
+fi
+FETCH_ERROR_REST_AUTH='Jira authentication failed (HTTP 401/403)'
+FETCH_ERROR_REST_NOT_FOUND='Jira issue or endpoint was not found (HTTP 404)'
+FETCH_ERROR_REST_RATE='Jira rate limit reached (HTTP 429)'
+FETCH_ERROR_REST_INVALID='Jira response was not valid issue JSON'
 for fetch_error_parent in "$STATE" "$STATE"/session-*; do
   [ -e "$fetch_error_parent" ] || continue
   [ -d "$fetch_error_parent" ] && [ ! -L "$fetch_error_parent" ] \
@@ -349,6 +401,7 @@ for fetch_error_parent in "$STATE" "$STATE"/session-*; do
       "$FETCH_ERROR_TWG") fetch_error_expected=$(printf '%s\n' "$FETCH_ERROR_TWG" | wc -c | tr -d ' ') ;;
       "$FETCH_ERROR_JIRA") fetch_error_expected=$(printf '%s\n' "$FETCH_ERROR_JIRA" | wc -c | tr -d ' ') ;;
       "$FETCH_ERROR_MISSING") fetch_error_expected=$(printf '%s\n' "$FETCH_ERROR_MISSING" | wc -c | tr -d ' ') ;;
+      "$FETCH_ERROR_REST_AUTH"|"$FETCH_ERROR_REST_NOT_FOUND"|"$FETCH_ERROR_REST_RATE"|"$FETCH_ERROR_REST_INVALID") fetch_error_expected=$(printf '%s\n' "$fetch_error_value" | wc -c | tr -d ' ') ;;
       *) fetch_error_valid=0 ;;
     esac
     [ "$fetch_error_bytes" = "${fetch_error_expected:-}" ] || fetch_error_valid=0
@@ -474,7 +527,7 @@ record_fetch_error() {
   fetch_error_fallback_source=${4:-}
   fetch_error_message=$FETCH_ERROR_GENERIC
   case "$fetch_error_prefix" in
-    "$FETCH_ERROR_GENERIC"|"$FETCH_ERROR_TWG"|"$FETCH_ERROR_JIRA"|"$FETCH_ERROR_MISSING") fetch_error_message=$fetch_error_prefix ;;
+    "$FETCH_ERROR_GENERIC"|"$FETCH_ERROR_TWG"|"$FETCH_ERROR_JIRA"|"$FETCH_ERROR_MISSING"|"$FETCH_ERROR_REST_AUTH"|"$FETCH_ERROR_REST_NOT_FOUND"|"$FETCH_ERROR_REST_RATE"|"$FETCH_ERROR_REST_INVALID") fetch_error_message=$fetch_error_prefix ;;
   esac
   save_fetch_error "$fetch_error_key" "$fetch_error_message"
 }
@@ -484,7 +537,7 @@ fetch_error_detail() {
   [ -s "$fetch_error_file" ] || return 1
   fetch_error_detail=$(sed -n '1p' "$fetch_error_file" 2>/dev/null || true)
   case "$fetch_error_detail" in
-    "$FETCH_ERROR_GENERIC"|"$FETCH_ERROR_TWG"|"$FETCH_ERROR_JIRA"|"$FETCH_ERROR_MISSING") printf '%s' "$fetch_error_detail" ;;
+    "$FETCH_ERROR_GENERIC"|"$FETCH_ERROR_TWG"|"$FETCH_ERROR_JIRA"|"$FETCH_ERROR_MISSING"|"$FETCH_ERROR_REST_AUTH"|"$FETCH_ERROR_REST_NOT_FOUND"|"$FETCH_ERROR_REST_RATE"|"$FETCH_ERROR_REST_INVALID") printf '%s' "$fetch_error_detail" ;;
     *) printf '%s' "$FETCH_ERROR_GENERIC" ;;
   esac
 }
@@ -503,7 +556,7 @@ cache_entry_valid() {
   cache_key=${1:-}
   validate_key "$cache_key" || return 1
   cache_file="$CACHE/$cache_key.json"
-  [ -s "$cache_file" ] \
+  [ -s "$cache_file" ] && [ ! -L "$cache_file" ] \
     && [ "$CACHE_TTL_MIN" -gt 0 ] \
     && [ -n "$(find "$cache_file" -mmin -"$CACHE_TTL_MIN" -print 2>/dev/null)" ] \
     && jq -s -e --arg requested_key "$cache_key" \
@@ -551,10 +604,14 @@ fetch_work_cleanup() {
         ;;
     esac
   done
+  case "${rest_dir:-}" in "$STATE"/.rest-fetch.*) [ -d "$rest_dir" ] && rm -rf "$rest_dir" ;; esac
+  case "${rest_metadata_dir:-}" in "$STATE"/.rest-metadata.*) [ -d "$rest_metadata_dir" ] && rm -rf "$rest_metadata_dir" ;; esac
+  connection_unlock || true
   cache_publish_unlock || true
 }
 
 fetch_failure() {
+  connection_assert_current || return 1
   fetch_failure_key=${1:-}
   fetch_failure_prefix=${2:-$FETCH_ERROR_GENERIC}
   fetch_failure_source=${3:-}
@@ -572,6 +629,7 @@ fetch_failure() {
 }
 
 save_key() {
+  connection_assert_current || die 'Connection changed; close and reopen Peek.'
   key=${1:-}
   validate_key "$key" || die "invalid Jira issue key"
   key_tmp=$(mktemp "${KEY_FILE%/*}/.key.XXXXXX") || die 'could not save selected issue'
@@ -627,11 +685,12 @@ lock_acquire() {
 }
 
 issue_url() {
+  connection_assert_current || return 1
   key=${1:-}
   validate_key "$key" || return 1
 
   cached="$CACHE/$key.json"
-  if [ -s "$cached" ] \
+  if [ -s "$cached" ] && [ ! -L "$cached" ] \
     && jq -e --arg requested_key "$key" \
       'type == "object" and .key == $requested_key' "$cached" >/dev/null 2>&1; then
     url=$(jq -r '.url // empty' "$cached" 2>/dev/null || true)
@@ -976,6 +1035,7 @@ toggle_viewer() {
 
 # Open a viewer in an adjacent right-side split.
 show() {
+  connection_assert_current --identity || die 'Connection changed; reopen Peek.'
   # resolve_action_source captured the action's identity before any toggle.
   # Resolve again if a layout operation moved the terminal during the scan.
   if [ "$(pane_terminal "$source_pane" || true)" != "$source_terminal" ]; then
@@ -998,6 +1058,8 @@ show() {
     --env "HERDR_VIEWER_SOURCE_PANE=$source_pane" \
     --env "HERDR_VIEWER_SOURCE_TERMINAL=$source_terminal" \
     --env "HERDR_VIEWER_CANDIDATES=$candidate_env" \
+    --env "VIEWER_CONNECTION_ID=$CONNECTION_ID" \
+    --env "VIEWER_CONNECTION_EPOCH=$CONNECTION_EPOCH" \
     --focus > "$open_tmp" || open_status=$?
   if [ "$open_status" -ne 0 ]; then
     rm -f "$open_tmp"
@@ -1016,6 +1078,10 @@ show() {
   if ! validate_terminal_id "$opened_terminal"; then
     "$HERDR" plugin pane close "$opened_pane" >/dev/null 2>&1 || true
     die 'Herdr returned no valid viewer terminal ID'
+  fi
+  if ! connection_assert_current; then
+    "$HERDR" plugin pane close "$opened_pane" >/dev/null 2>&1 || true
+    die 'Connection changed while opening Peek; reopen with the current connection.'
   fi
   save_viewer_tracking "$opened_pane" "$opened_terminal"
   # Herdr 0.9.0 can leave plugin panes at their estimated PTY size until the
@@ -1050,10 +1116,47 @@ run_twg_metadata_batch() {
   return "$metadata_status"
 }
 
+run_rest_metadata_batch() (
+  metadata_keys_file=$1; metadata_raw=$2; metadata_stderr=$3
+  rest_dir=$(mktemp -d "$STATE/.rest-metadata.$$.XXXXXX") || return 1
+  trap 'rm -rf "$rest_dir"' 0
+  trap 'exit 1' 1 2 15
+  rest_metadata_dir=$rest_dir
+  rest_payload="$rest_dir/payload"; rest_status="$rest_dir/status"
+  jq -Rn '[inputs | select(length > 0)] | {issueIdsOrKeys: ., fields:["summary","status","assignee","updated"]}' "$metadata_keys_file" > "$rest_payload" || { rm -rf "$rest_dir"; return 1; }
+  # shellcheck source=scripts/jira-rest.sh
+  . "$DIR/jira-rest.sh"
+  rest_validate_auth || { rest_status_code=$?; rm -rf "$rest_dir"; return "$rest_status_code"; }
+  rest_post "$(rest_origin)/rest/api/3/issue/bulkfetch" "$rest_payload" "$metadata_raw" "$rest_status" "$metadata_stderr" || { rm -rf "$rest_dir"; return 1; }
+  rest_code=$(sed -n '1p' "$rest_status" 2>/dev/null || true)
+  [ "$rest_code" = 200 ] || { rest_http_failure "$rest_status"; rest_rc=$?; rm -rf "$rest_dir"; return "$rest_rc"; }
+  jq -s -e 'length == 1 and (.[0] | type) == "object" and (.[0].issues | type) == "array"' "$metadata_raw" >/dev/null 2>&1 || return 20
+  rm -rf "$rest_dir"
+)
+run_metadata_batch() {
+  connection_assert_current || return 1
+  batch_connection_status=0
+  if [ "$JIRA_BACKEND" = rest ]; then run_rest_metadata_batch "$@" || batch_connection_status=$?; else run_twg_metadata_batch "$@" || batch_connection_status=$?; fi
+  connection_assert_current --identity || return 1
+  if { [ "$JIRA_BACKEND" = rest ] && [ "$batch_connection_status" -eq 10 ]; } \
+    || { [ "$JIRA_BACKEND" = twg ] && [ "$batch_connection_status" -ne 0 ] && is_twg_auth_error "$3" "$2"; }; then
+    connection_revoke || true
+  fi
+  return "$batch_connection_status"
+}
+
 metadata_row() {
   metadata_source=${1:-}
   metadata_requested_key=${2:-}
   [ -r "$metadata_source" ] || return 1
+  if [ "$JIRA_BACKEND" = rest ]; then
+    jq -r -s -e --arg requested_key "$metadata_requested_key" '
+      if (length == 1 and (.[0] | type) == "object" and (.[0].issues | type) == "array") then .[0].issues[] | select(type == "object" and .key == $requested_key and (.fields | type) == "object")
+        | def t: tostring | gsub("[\u0000-\u001f\u007f-\u009f]"; " ");
+          [.key, ((if (.fields.status | type) == "object" then .fields.status.name // "?" else "?" end) | t), ((.fields.summary // "") | t)] | @tsv
+        else empty end' "$metadata_source"
+    return
+  fi
   jq -r -s -e --arg requested_key "$metadata_requested_key" '
     def docs:
       if length != 1 then []
@@ -1079,6 +1182,7 @@ metadata_row() {
 # TWG is deliberately invoked with direct JSON output so the plugin never has
 # to trust an indirect path to a second response file.
 fetch() {
+  connection_assert_current || return 1
   key=${1:-}
   validate_key "$key" || return 1
   fetch_generation=$(cache_generation_read "$key") || return 1
@@ -1103,7 +1207,7 @@ fetch() {
     return 0
   fi
 
-  if ! command -v "$TWG" >/dev/null 2>&1; then
+  if [ "$JIRA_BACKEND" = twg ] && ! command -v "$TWG" >/dev/null 2>&1; then
     if fetch_failure "$key" 'TWG CLI unavailable; install the official Atlassian TWG CLI, ensure it is on PATH, then run twg setup'; then
       return 0
     fi
@@ -1131,9 +1235,29 @@ fetch() {
     return 1
   }
   twg_status=0
-  "$TWG" --mode user --api-version v2 --site "$JIRA_SITE" --output json \
-    jira workitem get "$key" --comments > "$raw" 2> "$stderr" \
-    || twg_status=$?
+  if [ "$JIRA_BACKEND" = rest ]; then
+    # The REST transport writes the same canonical issue shape consumed below.
+    # shellcheck source=scripts/jira-rest.sh
+    . "$DIR/jira-rest.sh"
+    rest_dir="$STATE/.rest-fetch.$$.XXXXXX"
+    rest_dir=$(mktemp -d "$rest_dir") || twg_status=1
+    if [ "$twg_status" -eq 0 ]; then
+      rest_fetch_issue "$key" "$rest_dir" > "$raw" 2> "$stderr" || twg_status=$?
+      rm -rf "$rest_dir"
+    fi
+  else
+    "$TWG" --mode user --api-version v2 --site "$JIRA_SITE" --output json \
+      jira workitem get "$key" --comments > "$raw" 2> "$stderr" \
+      || twg_status=$?
+  fi
+  connection_assert_current --identity || { rm -f "$raw" "$stderr" "$normalized"; return 1; }
+  if { [ "$JIRA_BACKEND" = rest ] && [ "$twg_status" -eq 10 ]; } \
+    || { [ "$JIRA_BACKEND" = twg ] && [ "$twg_status" -ne 0 ] && is_twg_auth_error "$stderr" "$raw"; }; then
+    if [ "$JIRA_BACKEND" = rest ]; then record_fetch_error "$key" "$FETCH_ERROR_REST_AUTH"; else record_fetch_error "$key" "$FETCH_ERROR_TWG"; fi
+    connection_revoke || true
+    rm -f "$raw" "$stderr" "$normalized"
+    return 1
+  fi
   if [ "$twg_status" -ne 0 ]; then
     json_error=$(mktemp "$STATE/.twg-error.$$.XXXXXX") || {
       if fetch_failure "$key" 'Jira request failed' '' "$stderr"; then
@@ -1144,6 +1268,18 @@ fetch() {
       return 1
     }
     fetch_failure_result=1
+    if [ "$JIRA_BACKEND" = rest ]; then
+      case "$twg_status" in
+        10) fetch_failure "$key" "$FETCH_ERROR_REST_AUTH" && fetch_failure_result=0 ;;
+        11) fetch_failure "$key" "$FETCH_ERROR_REST_NOT_FOUND" && fetch_failure_result=0 ;;
+        12) fetch_failure "$key" "$FETCH_ERROR_REST_RATE" && fetch_failure_result=0 ;;
+        20) fetch_failure "$key" "$FETCH_ERROR_REST_INVALID" && fetch_failure_result=0 ;;
+        127) fetch_failure "$key" "$FETCH_ERROR_MISSING" && fetch_failure_result=0 ;;
+        *) fetch_failure "$key" "$FETCH_ERROR_JIRA" && fetch_failure_result=0 ;;
+      esac
+      rm -f "$raw" "$stderr" "$normalized" "$json_error"
+      return "$fetch_failure_result"
+    fi
     if extract_fetch_json_error "$raw" > "$json_error"; then
       if is_twg_auth_error "$stderr" "$json_error"; then
         fetch_failure "$key" 'TWG is not authenticated or configured; run twg setup, then retry' "$json_error" "$stderr" \
@@ -1190,6 +1326,7 @@ fetch() {
     return 1
   fi
 
+  connection_assert_current || { rm -f "$raw" "$stderr" "$normalized"; return 1; }
   cache_publish_lock "$key" || {
     rm -f "$raw" "$stderr" "$normalized"
     return 1
@@ -1211,7 +1348,14 @@ fetch() {
       return 1
     }
   fi
+  if ! connection_lock; then
+    cache_publish_unlock; rm -f "$raw" "$stderr" "$normalized"; return 1
+  fi
+  if ! connection_assert_current; then
+    connection_unlock; cache_publish_unlock; rm -f "$raw" "$stderr" "$normalized"; return 1
+  fi
   if ! mv "$normalized" "$out"; then
+    connection_unlock
     cache_publish_unlock
     rm -f "$raw" "$stderr" "$normalized"
     if fetch_failure "$key" "$FETCH_ERROR_GENERIC"; then
@@ -1219,6 +1363,7 @@ fetch() {
     fi
     return 1
   fi
+  connection_unlock || return 1
   if ! cache_publish_unlock; then
     rm -f "$raw" "$stderr"
     return 1
@@ -1240,3 +1385,6 @@ fetch() {
 if [ -n "${HERDR_VIEWER_SOURCE_TERMINAL:-}" ]; then
   select_source_state "$HERDR_VIEWER_SOURCE_TERMINAL"
 fi
+
+require_backend
+connection_initialize || die 'Connection changed or identity is unavailable; close Peek, verify authentication with setup/doctor, and reopen.'

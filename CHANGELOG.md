@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.3.0 — 2026-09-19
+
+- Add an explicit optional Jira Cloud REST backend with external netrc
+  credentials. TWG remains the default; REST never silently falls back to TWG.
+- Add staged connection activation, hashed connection markers, flat-cache
+  invalidation, and stale viewer callback protection for backend/account changes.
+- Keep the picker, reader, refresh, rescan, browser, and clipboard controls
+  consistent across backends, including paginated REST comments.
+- Validate setup before replacing the active configuration. Preserve it on
+  cancellation, failed authentication, missing dependencies, or concurrent edits.
+- Invalidate cached data on observed authentication rejection and prevent
+  pending requests from restoring cache after a connection change or clear.
+- Avoid redundant preview refreshes that could duplicate Jira requests, and
+  clean up connection state left by cancelled preview workers.
+- Cover REST errors, credential rotation, setup recovery, and connection
+  isolation with fictional offline regression fixtures.
+
 ## 0.2.5 — 2026-09-13
 
 - Clear the entire filter with Ctrl-U, including from the middle of the query.

@@ -16,6 +16,8 @@ config.sh
 .env.*
 !.env.example
 *.local
+.netrc
+*.netrc
 
 # Local Herdr state and generated output
 cache/

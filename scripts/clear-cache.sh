@@ -5,6 +5,11 @@ umask 077
 
 state=${HERDR_PLUGIN_STATE_DIR:-${TMPDIR:-/tmp}/herdr-jira-peek}
 cache=$state/cache
+STATE=$state
+CACHE=$cache
+DIR=$(CDPATH='' cd "$(dirname "$0")" && pwd)
+# shellcheck source=scripts/connection.sh
+. "$DIR/connection.sh"
 
 case "$state" in
   ''|/|.)
@@ -31,6 +36,14 @@ if [ ! -d "$cache" ]; then
   exit 1
 fi
 
+# Advance the epoch under the same lock used for request publication. This
+# prevents a request that started before this action from restoring old data.
+connection_lock || { printf '%s\n' 'Peek for Jira: connection state is busy.' >&2; exit 1; }
+trap 'connection_unlock' 0
+trap 'exit 1' 1 2 15
+connection_read_marker || exit 1
+CONNECTION_ID=$connection_saved_id
+connection_new_epoch || exit 1
 removed=0
 # Deliberately do not recurse. The runtime stores issue payloads and temporary
 # fetch files directly in this directory; session state and diagnostics live

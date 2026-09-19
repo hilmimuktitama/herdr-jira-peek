@@ -6,9 +6,12 @@
 set -eu
 . "$(dirname "$0")/common.sh"
 require_fzf
-require_twg
+require_backend
 DIR=$(CDPATH= cd "$(dirname "$0")" && pwd)
 export DIR
+export VIEWER_CONNECTION_ID="$CONNECTION_ID" VIEWER_CONNECTION_EPOCH="$CONNECTION_EPOCH"
+export CONNECTION_ID CONNECTION_EPOCH CONNECTION_CONFIG_DIGEST CONNECTION_AUTH_DIGEST
+export JIRA_BACKEND JIRA_NETRC_FILE CONFIG_DIR STATE
 # Snapshot the preference once so resize/help callbacks stay lightweight.
 export VIEWER_PICKER_LAYOUT="$PICKER_LAYOUT"
 picker_layout=reverse
@@ -135,6 +138,7 @@ viewer_cleanup() {
     stop_tree "$viewer_workers" "$$" || true
     wait "$viewer_workers" 2>/dev/null || true
   fi
+  connection_cleanup_abandoned
   rm -rf "$viewer_state"
 }
 trap viewer_cleanup 0 1 2 15
@@ -169,7 +173,7 @@ if printf '%s\n' "$fzf_help" | grep -q -- '--id-nth' \
 else
   fzf_tracking=0
 fi
-if command -v curl >/dev/null 2>&1 \
+if command -v "${CURL_BIN_PATH:-curl}" >/dev/null 2>&1 \
   && printf '%s\n' "$fzf_help" | grep -q -- '--listen-unsafe' \
   && printf '%s\n' "$fzf_help" | grep -q -- '--id-nth' \
   && [ "$fzf_tracking" -eq 1 ]; then
@@ -277,10 +281,12 @@ printf '%s\n' "$fzf_help" | grep -q -- '--with-shell' && shell_arg=1
 if [ "$modernfooter" -eq 1 ]; then
   help_binding='f1:transform(sh "$DIR/viewer-ui.sh" help)'
 fi
-load_binding='load:transform-header(sh "$DIR/viewer-rows.sh" header)+transform-prompt(sh "$DIR/viewer-rows.sh" prompt)+refresh-preview'
+# Reloading changed rows already starts fzf's preview. A second explicit
+# refresh can cancel that request after it has reached Jira.
+load_binding='load:transform-header(sh "$DIR/viewer-rows.sh" header)+transform-prompt(sh "$DIR/viewer-rows.sh" prompt)'
 resize_binding=
 if [ "$modernfooter" -eq 1 ]; then
-  load_binding='load:transform-header(sh "$DIR/viewer-rows.sh" header)+transform-prompt(sh "$DIR/viewer-rows.sh" prompt)+refresh-preview+transform(sh "$DIR/viewer-ui.sh" relayout)'
+  load_binding='load:transform-header(sh "$DIR/viewer-rows.sh" header)+transform-prompt(sh "$DIR/viewer-rows.sh" prompt)+transform(sh "$DIR/viewer-ui.sh" relayout)'
   # Divider drags can flood fzf's resize queue. Compute chrome off the input
   # loop, then apply the footer and preview together without shell callbacks.
   resize_binding='resize:bg-transform(sh "$DIR/viewer-ui.sh" resize)'

@@ -15,7 +15,7 @@ if [ "${1:-}" = --watch ]; then
       # Retry delivery while the viewer lives; retain busy until fzf has the
       # completed snapshot so repeated key presses cannot race selection.
       while [ -d "$state" ]; do
-        if curl -sS --max-time 1 --unix-socket "$VIEWER_FZF_SOCKET" -X POST http://localhost \
+        if "${CURL_BIN_PATH:-curl}" -sS --max-time 1 --unix-socket "$VIEWER_FZF_SOCKET" -X POST http://localhost \
           -d "$actions" >/dev/null 2>&1; then break; fi
         sleep 0.1
       done
@@ -72,6 +72,7 @@ rm -f "$check"
 scan_rc=0; scan_candidates "$source_pane_arg" "$got" || scan_rc=$?
 if [ "$scan_rc" -eq 1 ]; then write_status "No Jira keys found; keeping previous $previous"; exit 1; fi
 if [ "$scan_rc" -ne 0 ]; then write_status "Could not read source terminal; keeping previous $previous"; exit 2; fi
+connection_assert_current || exit 1
 mv "$got" "$CANDIDATES_FILE"
 new_count=$(wc -l < "$CANDIDATES_FILE" | tr -d ' ')
 write_status "Rescanned: $new_count issues"

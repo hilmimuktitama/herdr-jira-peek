@@ -40,13 +40,17 @@ if [ "$arg" = --watch ]; then
   done
 fi
 notify() {
-  [ "${VIEWER_NOTIFY:-1}" = 1 ] && [ -n "${VIEWER_FZF_SOCKET:-}" ] && command -v curl >/dev/null 2>&1 || return 0
+  [ "${VIEWER_NOTIFY:-1}" = 1 ] && [ -n "${VIEWER_FZF_SOCKET:-}" ] && command -v "${CURL_BIN_PATH:-curl}" >/dev/null 2>&1 || return 0
   (cd "${VIEWER_STATE_DIR:?}" || exit 0
    published=$(sh "$DIR/viewer-rows.sh" publish) || exit 0
    if [ "$published" = unchanged ]; then
      # Metadata rescans do not invalidate detail. Only explicit Ctrl-R needs
      # to rerender when the selected issue's row text is unchanged.
      [ "$arg" = --refresh ] || exit 0
+     # A queued refresh can finish after selection moved to another issue.
+     # Refreshing that new preview cancels its fetch and can duplicate I/O.
+     notify_selected=$(sed -n '1p' "${VIEWER_KEY_FILE:-$KEY_FILE}" 2>/dev/null || true)
+     [ "$notify_selected" = "$key" ] || exit 0
      actions='refresh-preview'
    else
      actions='reload(cat "$VIEWER_STATE_DIR/snapshot")'
@@ -55,7 +59,7 @@ notify() {
    [ -S "$VIEWER_FZF_SOCKET" ] || exit 0
    i=0
    while [ "$i" -lt 3 ]; do
-      curl -sS --max-time 1 --unix-socket "$VIEWER_FZF_SOCKET" -X POST http://localhost -d "$actions" >/dev/null 2>&1 && exit 0
+      "${CURL_BIN_PATH:-curl}" -sS --max-time 1 --unix-socket "$VIEWER_FZF_SOCKET" -X POST http://localhost -d "$actions" >/dev/null 2>&1 && exit 0
      i=$((i + 1)); sleep 0.05
    done
   )
@@ -73,14 +77,25 @@ if [ "$arg" = --refresh ]; then
   trap 'fetch_cleanup; trap - 0; exit 1' 1 2 15
   printf '%s\n' "$key" > "$keys"
   batch_status=0
-  run_twg_metadata_batch "$keys" "$raw" "$stderr" || batch_status=$?
+  run_metadata_batch "$keys" "$raw" "$stderr" || batch_status=$?
+  connection_assert_current || exit 1
   row_tmp=$(mktemp "$state/rows/.$key.XXXXXX") || exit 1
   if [ "$batch_status" -eq 0 ] && metadata_row "$raw" "$key" > "$row_tmp"; then
     mv "$row_tmp" "$state/rows/$key"
     rm -f "$state/failed/$key"
     clear_fetch_error "$key" || true
   else
-    if [ "$batch_status" -eq 127 ]; then
+    if [ "$JIRA_BACKEND" = rest ] && [ "$batch_status" -eq 127 ]; then
+      batch_prefix='curl is unavailable; install curl and retry'
+    elif [ "$JIRA_BACKEND" = rest ] && [ "$batch_status" -eq 10 ]; then
+      batch_prefix='Jira authentication failed (HTTP 401/403)'
+    elif [ "$JIRA_BACKEND" = rest ] && [ "$batch_status" -eq 11 ]; then
+      batch_prefix='Jira issue or endpoint was not found (HTTP 404)'
+    elif [ "$JIRA_BACKEND" = rest ] && [ "$batch_status" -eq 12 ]; then
+      batch_prefix='Jira rate limit reached (HTTP 429)'
+    elif [ "$JIRA_BACKEND" = rest ]; then
+      batch_prefix='Jira request failed'
+    elif [ "$batch_status" -eq 127 ]; then
       batch_prefix='TWG CLI unavailable; install the official Atlassian TWG CLI, ensure it is on PATH, then run twg setup'
     elif is_twg_auth_error "$stderr" "$raw"; then
       batch_prefix='TWG is not authenticated or configured; run twg setup, then retry'
@@ -118,8 +133,18 @@ if [ "$arg" = --all ]; then
   fi
 
   batch_status=0
-  run_twg_metadata_batch "$keys" "$raw" "$stderr" || batch_status=$?
-  if [ "$batch_status" -eq 127 ]; then
+  run_metadata_batch "$keys" "$raw" "$stderr" || batch_status=$?
+  if [ "$JIRA_BACKEND" = rest ] && [ "$batch_status" -eq 127 ]; then
+    batch_prefix='curl is unavailable; install curl and retry'
+  elif [ "$JIRA_BACKEND" = rest ] && [ "$batch_status" -eq 10 ]; then
+    batch_prefix='Jira authentication failed (HTTP 401/403)'
+  elif [ "$JIRA_BACKEND" = rest ] && [ "$batch_status" -eq 11 ]; then
+    batch_prefix='Jira issue or endpoint was not found (HTTP 404)'
+  elif [ "$JIRA_BACKEND" = rest ] && [ "$batch_status" -eq 12 ]; then
+    batch_prefix='Jira rate limit reached (HTTP 429)'
+  elif [ "$JIRA_BACKEND" = rest ] && [ "$batch_status" -ne 0 ]; then
+    batch_prefix='Jira request failed'
+  elif [ "$batch_status" -eq 127 ]; then
     batch_prefix='TWG CLI unavailable; install the official Atlassian TWG CLI, ensure it is on PATH, then run twg setup'
   elif [ "$batch_status" -ne 0 ] && is_twg_auth_error "$stderr" "$raw"; then
     batch_prefix='TWG is not authenticated or configured; run twg setup, then retry'
@@ -128,6 +153,7 @@ if [ "$arg" = --all ]; then
   fi
 
   while IFS= read -r key || [ -n "$key" ]; do
+    connection_assert_current || exit 1
     row_tmp=$(mktemp "$state/rows/.$key.XXXXXX") || continue
     row_status=0
     if [ "$batch_status" -eq 0 ]; then
@@ -177,6 +203,7 @@ else
   : > "$state/failed/$key"
   printf '%s\t?\t(could not load)\n' "$key" > "$tmp"
 fi
+connection_assert_current || exit 1
 mv "$tmp" "$state/rows/$key"
 if [ "$fetch_ok" -eq 1 ]; then rm -f "$state/failed/$key"; fi
 trap - 0 1 2 15

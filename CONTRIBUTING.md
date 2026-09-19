@@ -23,7 +23,8 @@ images, and check image metadata for private information.
 
 - [Herdr](https://herdr.dev/docs/install/) >= 0.8.2 for linking and manual use
 - [TWG](https://developer.atlassian.com/cloud/twg-cli/getting-started/installation/)
-  >= 1.2.6, configured with Atlassian OAuth for live Jira use
+  >= 1.2.6, configured with Atlassian OAuth for live Jira use (default backend),
+  or `curl` plus a private mode-600 netrc for the REST backend
 - A POSIX shell, `jq`, and `less`
 - `fzf` for running the plugin; `expect` for interactive PTY coverage (with `less`)
 - ShellCheck 0.11.0 for the release lint gate (the version pinned in CI)
@@ -36,15 +37,20 @@ Clone the repository, make a change, and link the checkout into Herdr:
 herdr plugin link "$PWD"
 ```
 
-Run the **Set up Peek for Jira** action from Herdr after linking. Setup copies
-from Herdr's `HERDR_PLUGIN_ROOT`, preserves existing config, and checks tools
-and TWG authentication/connectivity. The separate dependency installer asks
-before installing tools and skips TWG login; run `twg setup` yourself. Keep a
-test Jira account and a narrow
+Run the **Set up Peek for Jira** action from Herdr after linking. Setup stages
+the existing config or the plugin's template, checks tools and the selected
+backend's authentication/connectivity, and activates only a valid candidate.
+The separate dependency
+installer asks before installing tools and skips TWG login; run `twg setup`
+yourself for TWG, or configure an external netrc for REST. Keep a test Jira account and a narrow
 `JIRA_PROJECTS` allowlist. Never commit credentials, private tenant details, or
-cached issue data. Automated tests fake Herdr and TWG, so they do not require
-either CLI, credentials, or a live Jira site. Some checks use real `fzf`,
+cached issue data. Automated tests fake Herdr and the transport, so they do not
+require either CLI, credentials, or a live Jira site. Some checks use real `fzf`,
 `less`, and `expect` binaries.
+
+Connection lifecycle behavior follows staged activation, connection ID,
+flat-cache invalidation, and viewer epoch acceptance cases in
+[`docs/connection-lifecycle-plan.md`](docs/connection-lifecycle-plan.md).
 
 `sh tests/dependencies.sh` checks setup and the installer with isolated fake
 tools. Its approval-path checks use `expect`; no real packages, downloads, or
@@ -94,7 +100,7 @@ of the test suite. CI runs shell syntax checks, static manifest contract checks
 It does not install Herdr or validate the manifest through Herdr itself.
 
 For an installed plugin, run **Check Peek for Jira** to verify config, state,
-dependencies, TWG version/authentication, and site access. Doctor never prints
+dependencies, selected-backend authentication, and site access. Doctor never prints
 credentials or issue content and never runs `twg setup`.
 
 ## Pull requests
