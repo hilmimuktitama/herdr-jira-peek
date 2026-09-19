@@ -208,15 +208,13 @@ backend's transport. REST never invokes TWG or silently falls back to it.
 
 ## Install and set up
 
-**Latest release:** [0.2.5](https://github.com/hilmimuktitama/herdr-jira-peek/releases/tag/v0.2.5).
+**Latest release:** [0.3.0](https://github.com/hilmimuktitama/herdr-jira-peek/releases/tag/v0.3.0).
 The command below installs the full reviewed commit SHA for this release.
-The dual-backend setup wizard and REST transport described here are part of
-the v0.3.0 release candidate; the installation pin will update on publication.
 
 With Herdr and git installed, install the plugin:
 
 ```sh
-herdr plugin install hilmimuktitama/herdr-jira-peek --ref a51df695ca57917ea1bb7802c613de64b7394a4b
+herdr plugin install hilmimuktitama/herdr-jira-peek --ref fe7be99d133a3497a46d9ae5d0ca61969e58581f
 ```
 
 1. Select **Set up Peek for Jira** from Herdr's plugin actions. The wizard

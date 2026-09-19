@@ -5,7 +5,7 @@ Plugin ID: `jira-peek`.
 
 The repository became public on 2026-09-07. Version `0.2.0` was published on
 2026-09-08 as the first versioned release; `0.1.0` was the development baseline.
-The latest release is `0.2.5`, published on 2026-09-13. This project has no
+The latest release is `0.3.0`, published on 2026-09-19. This project has no
 publish automation.
 
 ## Before making the repository public
@@ -63,10 +63,18 @@ previous public commit history has not been rewritten.
   Use fictional fixtures only; no live Jira account was accessed.
 - [x] Pass local shell syntax, manifest contract, ShellCheck 0.11.0, and the full
   runtime suite with real fzf/less/Expect coverage for both picker layouts.
-- [x] Review the prospective public tree and scan with Gitleaks 8.30.1. No
-  leaks were found, and no screenshots or runtime data were added.
-- [ ] Verify Linux and macOS CI on the release commit.
-- [ ] Publish v0.3.0 and pin README installation to its full release SHA.
+  Final review fixes for configs without a terminal newline and missing REST
+  summaries also passed their targeted setup and rendering parity regressions.
+- [x] Review the prospective public tree and release commit with Gitleaks
+  8.30.1. No leaks were found, and no screenshots or runtime data were added.
+- [x] Verify Linux and macOS CI on release commit
+  `fe7be99d133a3497a46d9ae5d0ca61969e58581f`: both jobs passed in
+  [run 35436323467](https://github.com/hilmimuktitama/herdr-jira-peek/actions/runs/35436323467).
+  The first macOS attempt timed out at `rescan-resize-while-gated` in the
+  bottom-layout PTY test. The failed job passed on one retry of the same commit.
+- [x] Publish [v0.3.0](https://github.com/hilmimuktitama/herdr-jira-peek/releases/tag/v0.3.0)
+  from that commit and pin README installation to its full SHA with `--ref`.
+  The subsequent documentation commit records publication; it changes no runtime code.
 
 Close existing viewers before updating or changing authentication. Existing TWG
 configuration remains compatible. With a positive cache TTL, remote revocation
