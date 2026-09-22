@@ -5,7 +5,7 @@ Plugin ID: `jira-peek`.
 
 The repository became public on 2026-09-07. Version `0.2.0` was published on
 2026-09-08 as the first versioned release; `0.1.0` was the development baseline.
-The latest release is `0.4.0`, published on 2026-09-23. This project has no
+The latest release is `0.4.1`, published on 2026-09-23. This project has no
 publish automation.
 
 ## Before making the repository public
@@ -44,6 +44,31 @@ publish automation.
   links are not an independent verification of each agreement.
 - [ ] Confirm the reporting inbox receives private security and conduct reports;
   delivery has not been independently tested.
+
+## Version 0.4.1 release validation — 2026-09-23
+
+- [x] Independently review preview reflow, bounded Unicode rendering, opening
+  feedback cleanup, source-pane isolation, test assertions, and documentation.
+  Strengthen filter and scroll preservation checks found during final review.
+- [x] Pass all 221 local runtime checks with no skips, including real fzf/less/
+  Expect tests for both layouts. Verify that temporary test copies with an
+  injected query reset or scroll reset fail at the corresponding assertion.
+  Automated checks use fictional data and do not access a live Jira account.
+- [x] Pass shell syntax, manifest validation, ShellCheck 0.11.0, and local
+  documentation link checks.
+- [x] Review the public diff and scan the prospective tree and release commit
+  with Gitleaks 8.30.1; no leaks found. No screenshots or runtime data files
+  were added.
+- [x] Verify Linux and macOS CI on release commit
+  `431e6d093e19214e9b2a6e9524778890a89e0e8f`: both jobs passed on their first run in
+  [run 35789616306](https://github.com/hilmimuktitama/herdr-jira-peek/actions/runs/35789616306).
+- [x] Publish [v0.4.1](https://github.com/hilmimuktitama/herdr-jira-peek/releases/tag/v0.4.1)
+  from that commit and pin README installation to its full SHA with `--ref`.
+  The subsequent documentation commit records publication; it changes no runtime code.
+
+Initial source-terminal flicker during split creation remains unresolved.
+The startup redraw workaround for initial clipping remains in place. Existing
+configuration stays compatible; close and reopen viewers after updating.
 
 ## Version 0.4.0 release validation — 2026-09-23
 

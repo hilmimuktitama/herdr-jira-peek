@@ -16,11 +16,11 @@ Requires [Herdr](https://herdr.dev/docs/install/) >= 0.8.2 on macOS or Linux,
 [TWG CLI](https://developer.atlassian.com/cloud/twg-cli/getting-started/installation/)
 1.2.6 or newer with OAuth (the default), or Jira Cloud REST with `curl` and an API token.
 
-Install [v0.4.0](https://github.com/hilmimuktitama/herdr-jira-peek/releases/tag/v0.4.0),
+Install [v0.4.1](https://github.com/hilmimuktitama/herdr-jira-peek/releases/tag/v0.4.1),
 pinned to its release commit:
 
 ```sh
-herdr plugin install hilmimuktitama/herdr-jira-peek --ref b494dab4876b95f21b089ed7c04e8e7890edadb1
+herdr plugin install hilmimuktitama/herdr-jira-peek --ref 431e6d093e19214e9b2a6e9524778890a89e0e8f
 ```
 
 1. Select **Set up Peek for Jira** from Herdr's plugin actions. Choose your
