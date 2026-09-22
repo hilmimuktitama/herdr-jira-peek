@@ -41,3 +41,15 @@ PICKER_LAYOUT='bottom'
 # Optional: override the scan expression instead of deriving it from JIRA_PROJECTS.
 # Detected keys must still match JIRA_PROJECTS; this cannot expand the allowlist.
 # KEY_RE='(ABC|DEF)-[0-9]+'
+
+# Choose the ordered fields shown in the picker and issue views. The issue key
+# is always retained as the selection identity. Empty values are allowed.
+PICKER_FIELDS='status,summary'
+PREVIEW_FIELDS='status,assignee,updated,description,comments'
+READER_FIELDS='status,assignee,updated,link,description,comments'
+
+# Optional human labels for standard or custom fields. Keep labels concise.
+# FIELD_LABELS='customfield_10016:Points,duedate:Due'
+
+# Uses the terminal's colors. Optional: remove heading emphasis and dim text.
+# TEXT_STYLE='plain'

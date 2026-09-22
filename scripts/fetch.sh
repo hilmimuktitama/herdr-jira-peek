@@ -1,7 +1,7 @@
 #!/bin/sh
 # shellcheck source=scripts/common.sh
 # shellcheck disable=SC2329 # Cleanup is invoked indirectly by exit traps.
-# Warm the cache for one key and print a picker row: KEY  STATUS  SUMMARY.
+# Warm the cache for one key and print a configured picker row (key is always first).
 set -eu
 . "$(dirname "$0")/common.sh"
 key=${1:-}
@@ -18,10 +18,7 @@ if fetch "$key" >/dev/null; then
   f=$FETCHED_FILE
   connection_assert_current || die 'Connection changed; retry with the current connection.'
   fetch_status=0
-  jq -r '
-    def row_text: tostring | gsub("[\u0000-\u001f\u007f-\u009f]"; " ");
-    [.key, ((.status.name // "?") | row_text), ((.summary // "") | row_text)] | @tsv
-  ' "$f" || fetch_status=$?
+  picker_row "$f" || fetch_status=$?
   fetch_cleanup "$f"
   f=
   trap - 0 1 2 15

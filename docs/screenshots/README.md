@@ -29,3 +29,8 @@ updating the README. Screenshots may vary with the installed fzf version.
 The older `picker.png`, `filtered.png`, `wide.png`, and `workflow.png` show the
 optional top layout. `reader.png` shows the full issue reader, which is shared
 by both layouts. All examples use fictional issues and identities.
+
+`customized.png` uses the same fictional issues with priority columns, a points
+field in the compact preview, and the terminal's normal palette. The capture checks an exact `empty`
+filter to avoid broad fuzzy matches across the extra columns. Regenerate only
+this example with `python3 docs/screenshots/capture.py --custom-only`.

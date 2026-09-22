@@ -104,6 +104,7 @@ else
   printf '1. Edit %s and set JIRA_BASE, JIRA_SITE, and your narrow JIRA_PROJECTS allowlist.\n' "$config_file"
 fi
 printf '%s\n' "   Bottom layout is the default; optionally set PICKER_LAYOUT='top' for the original layout."
+printf '%s\n' '   Choose fields with Customize Peek for Jira.'
 printf '%s\n' '2. Resolve any dependency or authentication failures above, then rerun setup.'
 printf '%s\n' "3. Check the configuration and Jira access: herdr plugin action invoke --plugin $plugin_id doctor"
 printf '%s\n' '4. Add the prefix+i keybinding shown in README.md, then reload Herdr: herdr server reload-config'

@@ -60,6 +60,7 @@ if HERDR_PLUGIN_CONFIG_DIR="$candidate_dir" HERDR_PLUGIN_STATE_DIR="$candidate_d
   fi
   mv "$candidate" "$config_file"
   printf '%s\n' 'Setup complete. The validated connection is active.'
+  printf '%s\n' 'Choose fields with Customize Peek for Jira.'
 else
   rm -f "$candidate_dir/config.sh"; rmdir "$candidate_dir" 2>/dev/null || true
   printf '%s\n' 'Setup cancelled: validation failed; the previous config was preserved.' >&2

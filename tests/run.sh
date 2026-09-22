@@ -1068,8 +1068,9 @@ if ! run env NO_COLOR=1 sh "$ROOT/scripts/viewer-reader.sh" "$ROOT/scripts" ABC-
 fi
 grep -Fqx 'q back · ↑↓ scroll · Space/b page' "$LESS_ARGS_LOG" \
   && pass 'reader uses concise less help' || fail 'reader uses concise less help'
-expected_less_so=$(printf 'so=\033[2m')
-expected_less_se=$(printf 'se=\033[0m')
+# NO_COLOR disables pager standout controls as well as rendered issue ANSI.
+expected_less_so=$(printf 'so=')
+expected_less_se=$(printf 'se=')
 grep -Fqx "$expected_less_so" "$LESS_ENV_LOG" && grep -Fqx "$expected_less_se" "$LESS_ENV_LOG" \
   && pass 'reader passes muted less standout overrides' \
   || fail 'reader passes muted less standout overrides'
@@ -1528,8 +1529,8 @@ printf '%s\n' ABC-123 > "$NONOBJECT_STATE/candidates"
 printf '%s\n' '{"key":"ABC-123","status":"Done","summary":"Portable peek"}' > "$NONOBJECT_STATE/cache/ABC-123.json"
 env HERDR_PLUGIN_CONFIG_DIR="$CONFIG" HERDR_PLUGIN_STATE_DIR="$NONOBJECT_STATE" VIEWER_STATE_DIR="$NONOBJECT_STATE" sh "$ROOT/scripts/viewer-fetch.sh" ABC-123 || fail 'non-object status worker'
 nonobject_rows=$(env HERDR_PLUGIN_CONFIG_DIR="$CONFIG" HERDR_PLUGIN_STATE_DIR="$NONOBJECT_STATE" VIEWER_STATE_DIR="$NONOBJECT_STATE" sh "$ROOT/scripts/viewer-rows.sh")
-printf '%s\n' "$nonobject_rows" | awk -F '\t' 'NF==2 && $1=="ABC-123" && $2 ~ /^ABC-123[[:space:]]+\?[[:space:]]+Portable peek[[:space:]]*$/ { ok=1 } END { exit !ok }' || fail 'non-object status publishes row'
-pass 'non-object status publishes unknown status'
+printf '%s\n' "$nonobject_rows" | awk -F '\t' 'NF==2 && $1=="ABC-123" && $2 ~ /^ABC-123[[:space:]]+Done[[:space:]]+Portable peek[[:space:]]*$/ { ok=1 } END { exit !ok }' || fail 'non-object status publishes row'
+pass 'scalar status publishes readable status'
 
 PUBLISHED_STATE="$TMP/viewer-published"
 PUBLISHED_LOG="$TMP/viewer-published-twg.log"
@@ -1918,6 +1919,7 @@ run sh "$ROOT/scripts/open-browser.sh" --copy-link ABC-123
   || fail 'configured URL fallback'
 pass 'configured URL fallback'
 
+sh "$ROOT/tests/preferences.sh"
 sh "$ROOT/tests/rescan.sh"
 OVERFLOW_REAL_FZF="$REAL_FZF_PATH" sh "$ROOT/tests/overflow.sh"
 sh "$ROOT/tests/multipane.sh"

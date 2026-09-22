@@ -22,12 +22,14 @@ out=; url=; code=${FAKE_HTTP:-200}
 [ "$1" = -q ] || exit 99
 printf '%s\n' "$*" >> "${FAKE_LOG:?}"
 while [ "$#" -gt 0 ]; do
-  case "$1" in -o) shift; out=$1 ;; -w) shift ;; --netrc-file|-H|--connect-timeout|--max-time|--proto|--max-redirs|--data-binary) shift ;; http://*|https://*) url=$1 ;; esac
+  case "$1" in -o) shift; out=$1 ;; -w) shift ;; --netrc-file|-H|--connect-timeout|--max-time|--proto|--max-redirs) shift ;;
+    --data-binary) shift; [ -z "${FAKE_BODY_LOG:-}" ] || cat "${1#@}" >> "$FAKE_BODY_LOG" ;;
+    http://*|https://*) url=$1 ;; esac
   shift
 done
 case "$url" in
-  */bulkfetch) body='{"issues":[{"key":"ABC-123","fields":{"summary":"A summary","status":{"name":"Open"},"assignee":{"displayName":"Fictional User"},"updated":"2026-01-01"}}]}' ;;
-  */issue/ABC-123?fields=*) body='{"key":"ABC-123","fields":{"summary":"A summary","status":{"name":"Open"},"assignee":{"displayName":"Fictional User"},"updated":"2026-01-01","description":{"type":"doc","version":1,"content":[{"type":"paragraph","content":[{"type":"text","text":"Fictional preview body"}]}]}}}' ;;
+  */bulkfetch) body='{"issues":[{"key":"ABC-123","fields":{"summary":"A summary","status":{"name":"Open"},"assignee":{"displayName":"Fictional User"},"updated":"2026-01-01","priority":{"name":"High"},"customfield_10016":5}}]}' ;;
+  */issue/ABC-123?fields=*) body='{"key":"ABC-123","fields":{"summary":"A summary","status":{"name":"Open"},"assignee":{"displayName":"Fictional User"},"updated":"2026-01-01","priority":{"name":"High"},"customfield_10016":5,"description":{"type":"doc","version":1,"content":[{"type":"paragraph","content":[{"type":"text","text":"Fictional preview body"}]}]}}}' ;;
   */comment?startAt=0*) body='{"startAt":0,"maxResults":2,"total":3,"comments":[{"id":"1","body":{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"Fictional preview body"}]}]},"author":{"displayName":"Fictional User"}},{"id":"2","body":{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"Fictional preview body"}]}]},"author":{"displayName":"Another User"}}]}' ;;
   */comment?startAt=2*) body='{"startAt":2,"maxResults":2,"total":3,"comments":[{"id":"3","body":{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"Fictional preview body"}]}]},"author":{"displayName":"Fictional User"}}]}' ;;
   *) body='{"error":"fictional"}' ;;
@@ -52,7 +54,7 @@ fi
 printf '%s' "$code"
 EOF
 chmod 700 "$T/bin/curl"
-run() { env PATH="$T/bin:$PATH" HERDR_PLUGIN_CONFIG_DIR="$T/config" HERDR_PLUGIN_STATE_DIR="$T/state" CURL_BIN_PATH=curl TWG_LOG="$T/twg.log" FAKE_LOG="$T/curl.log" FAKE_HTTP="${1:-200}" FAKE_FAILURE="${2:-}" FAKE_DOCUMENT="${3:-}" sh "$ROOT/scripts/fetch.sh" ABC-123; }
+run() { env PATH="$T/bin:$PATH" HERDR_PLUGIN_CONFIG_DIR="$T/config" HERDR_PLUGIN_STATE_DIR="$T/state" CURL_BIN_PATH=curl TWG_LOG="$T/twg.log" FAKE_LOG="$T/curl.log" FAKE_BODY_LOG="${FAKE_BODY_LOG:-}" FAKE_HTTP="${1:-200}" FAKE_FAILURE="${2:-}" FAKE_DOCUMENT="${3:-}" sh "$ROOT/scripts/fetch.sh" ABC-123; }
 assert_clean() {
   [ -z "$(find "$T/state" -maxdepth 1 \( -name '.rest-*' -o -name '.twg-*' -o -name '.issue-*' \) -print)" ] || { echo 'request temporary data remained' >&2; exit 1; }
   ! grep -R FICTIONAL_RAW_SENTINEL "$T/state" "$T/failure-output" >/dev/null 2>&1 || { echo 'raw response or stderr retained' >&2; exit 1; }
@@ -66,6 +68,40 @@ before=$(wc -l < "$T/curl.log")
 run >/dev/null
 [ "$(wc -l < "$T/curl.log")" = "$before" ] || { echo 'fresh REST cache made a request' >&2; exit 1; }
 if grep -R 'TWG' "$T/state" >/dev/null 2>&1; then echo 'REST emitted TWG diagnostic' >&2; exit 1; fi
+
+# A non-default projection must reach the REST issue request and preserve the
+# typed custom field in the canonical cache. Omitting comments from both detail
+# views must also avoid the paginated comment endpoint entirely.
+cat >> "$T/config/config.sh" <<'EOF'
+PICKER_FIELDS='status,summary,customfield_10016'
+PREVIEW_FIELDS='status,priority,customfield_10016,description'
+READER_FIELDS='status,priority,customfield_10016,description,link'
+EOF
+rm -f "$T/state/cache/ABC-123.json"
+: > "$T/curl.log"
+custom_body_log=$T/custom-body.log
+: > "$custom_body_log"
+custom_row=$(FAKE_BODY_LOG="$custom_body_log" run) || { echo 'custom REST projection failed' >&2; exit 1; }
+[ "$custom_row" = "$(printf 'ABC-123\tOpen\tA summary\t5')" ] || { echo 'custom REST picker projection changed' >&2; exit 1; }
+grep -F 'fields=' "$T/curl.log" | grep -F 'customfield_10016' >/dev/null || { echo 'custom REST fields query missing custom field' >&2; exit 1; }
+grep -F '/comment?' "$T/curl.log" >/dev/null && { echo 'comments endpoint requested when comments are disabled' >&2; exit 1; }
+jq -e '(.comments | type == "array") and (.comments | length == 0) and .fields.customfield_10016 == 5' "$T/state/cache/ABC-123.json" >/dev/null || { echo 'custom REST cache lost field or comment suppression' >&2; exit 1; }
+custom_viewer=$T/custom-viewer
+mkdir -p "$custom_viewer/rows" "$custom_viewer/failed"
+printf '%s\n' ABC-123 > "$custom_viewer/candidates"
+: > "$custom_body_log"
+env PATH="$T/bin:$PATH" HERDR_PLUGIN_CONFIG_DIR="$T/config" HERDR_PLUGIN_STATE_DIR="$T/state" CURL_BIN_PATH=curl FAKE_LOG="$T/curl.log" FAKE_BODY_LOG="$custom_body_log" VIEWER_STATE_DIR="$custom_viewer" sh "$ROOT/scripts/viewer-fetch.sh" --all "$custom_viewer/candidates" || { echo 'custom REST picker metadata refresh failed' >&2; exit 1; }
+[ "$(cat "$custom_viewer/rows/ABC-123")" = "$(printf 'ABC-123\tOpen\tA summary\t5')" ] || { echo 'custom REST picker metadata row changed' >&2; exit 1; }
+jq -e '.fields | index("customfield_10016")' "$custom_body_log" >/dev/null || { echo 'custom REST metadata request omitted custom field' >&2; exit 1; }
+printf '%s\n' 'ok - REST custom field request, typed cache, and comment suppression'
+
+# Continue the legacy parity and hostile-response checks with the established
+# defaults so their expected rows remain focused on transport sanitization.
+cat >> "$T/config/config.sh" <<'EOF'
+PICKER_FIELDS='status,summary'
+PREVIEW_FIELDS='status,assignee,updated,description,comments'
+READER_FIELDS='status,assignee,updated,link,description,comments'
+EOF
 printf '%s\n' ABC-123 > "$T/viewer/candidates"
 env PATH="$T/bin:$PATH" HERDR_PLUGIN_CONFIG_DIR="$T/config" HERDR_PLUGIN_STATE_DIR="$T/state" CURL_BIN_PATH=curl FAKE_LOG="$T/curl.log" VIEWER_STATE_DIR="$T/viewer" sh "$ROOT/scripts/viewer-fetch.sh" --all "$T/viewer/candidates"
 grep -q 'bulkfetch' "$T/curl.log" || { echo 'REST metadata bulkfetch missing' >&2; exit 1; }

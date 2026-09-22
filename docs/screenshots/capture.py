@@ -56,20 +56,23 @@ ISSUES = [
 ]
 
 
-def fixtures(base):
+def fixtures(base, preferences=""):
     config, state, bin_dir = (base / name for name in ("config", "state", "bin"))
     for path in (config, state / "cache", bin_dir):
         path.mkdir(parents=True, mode=0o700)
     # Omit PICKER_LAYOUT deliberately: these screenshots verify the default.
     (config / "config.sh").write_text(
         "JIRA_BASE='https://jira.example.test'\nJIRA_SITE='jira-example'\n"
-        "JIRA_PROJECTS='DEMO'\nCACHE_TTL_MIN=10\nMAX_CANDIDATES=20\n")
+        "JIRA_PROJECTS='DEMO'\nCACHE_TTL_MIN=10\nMAX_CANDIDATES=20\n" + preferences)
     (state / "candidates").write_text("\n".join(issue[0] for issue in ISSUES) + "\n")
     metadata = []
     issue_payloads = []
     for key, summary, status, description, comment in ISSUES:
         issue = dict(key=key, summary=summary, status={"name": status},
                      assignee={"displayName": "Alex Example"}, updated="2026-09-08T09:30:00Z",
+                     priority={"name": "High" if key == "DEMO-1042" else "Normal"},
+                     customfield_10016=5 if key == "DEMO-1042" else 3,
+                     labels=["catalog", "usability"], duedate="2026-10-15",
                      description=description, comments=[dict(author={"displayName": "Sam Sample"},
                      created="2026-09-08T10:15:00Z", body=comment)])
         issue_payloads.append((key, issue))
@@ -95,12 +98,17 @@ def fixtures(base):
     subprocess.run(["sh", "-c", ". \"$1/scripts/common.sh\"", "sh", str(ROOT)],
                    env=env, check=True, stdout=subprocess.DEVNULL,
                    stderr=subprocess.DEVNULL)
+    signature = subprocess.check_output(
+        ["sh", "-c", '. "$1/scripts/common.sh"; printf "%s" "$FIELD_REQUEST_SIGNATURE"', "sh", str(ROOT)],
+        env=env, text=True)
     for key, issue in issue_payloads:
+        issue["_peek_request"] = signature
         (state / "cache" / f"{key}.json").write_text(json.dumps(issue))
     return env
 
 
-def capture(env):
+def capture(env, initial_expected="Filter state now lives in the URL",
+            filtered_expected="The empty state now includes a Reset filters action.", query=b"empty"):
     pid, fd = pty.fork()
     if pid == 0:
         os.execve("/bin/sh", ["sh", str(ROOT / "scripts/viewer.sh")], env)
@@ -132,14 +140,14 @@ def capture(env):
         raise RuntimeError(f"Viewer did not settle on {expected!r}\n" + "\n".join(screen.display))
 
     try:
-        initial = settle("Filter state now lives in the URL")
+        initial = settle(initial_expected)
         positions = [next(y for y, line in enumerate(initial.display)
                           if line.startswith(("> ", "  ")) and key in line)
                      for key, *_ in ISSUES]
         assert positions == sorted(positions, reverse=True), "Newest issue is not at the bottom"
         assert "Filter >" in initial.display[-1], "Filter is not bottom anchored"
-        os.write(fd, b"empty")
-        filtered = settle("The empty state now includes a Reset filters action.")
+        os.write(fd, query)
+        filtered = settle(filtered_expected)
         os.write(fd, b"\x1b")
         deadline = time.monotonic() + 8
         while time.monotonic() < deadline:
@@ -211,17 +219,27 @@ def render(screen, name, title, font, bold, source=False):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--font", type=Path, default=Path("/System/Library/Fonts/Menlo.ttc"))
+    parser.add_argument("--custom-only", action="store_true", help="Capture only the customized field example")
     args = parser.parse_args()
     for command in ("fzf", "jq"):
         if not shutil.which(command):
             parser.error(f"{command} must be on PATH")
     font = ImageFont.truetype(str(args.font), 20)
     bold = ImageFont.truetype(str(args.font), 20, index=1 if args.font.suffix == ".ttc" else 0)
-    with tempfile.TemporaryDirectory(prefix="peek-docs-") as directory:
-        initial, filtered = capture(fixtures(Path(directory)))
-    render(initial, "picker-bottom.png", "Default picker", font, bold)
-    render(filtered, "filtered-bottom.png", "Filter and inspect", font, bold)
-    render(initial, "workflow-bottom.png", "Peek for Jira / terminal context", font, bold, source=True)
+    if not args.custom_only:
+        with tempfile.TemporaryDirectory(prefix="peek-docs-") as directory:
+            initial, filtered = capture(fixtures(Path(directory)))
+        render(initial, "picker-bottom.png", "Default picker", font, bold)
+        render(filtered, "filtered-bottom.png", "Filter and inspect", font, bold)
+        render(initial, "workflow-bottom.png", "Peek for Jira / terminal context", font, bold, source=True)
+    preferences = ("PICKER_FIELDS='priority,status,summary'\n"
+                   "PREVIEW_FIELDS='status,assignee,customfield_10016,description'\n"
+                   "READER_FIELDS='priority,labels,duedate,description,comments,link'\n"
+                   "FIELD_LABELS='customfield_10016:Points,duedate:Due'\n")
+    with tempfile.TemporaryDirectory(prefix="peek-docs-custom-") as directory:
+        initial, _ = capture(fixtures(Path(directory), preferences), "Points: 5", "When no products match", query=b"'empty")
+    render(initial, "customized.png", "Your fields / focused preview", font, bold)
+
 
 
 if __name__ == "__main__":

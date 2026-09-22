@@ -49,12 +49,12 @@ rest_fetch_issue() {
   rest_validate_auth || return $?
   mkdir -p "$rest_dir" || return 1
   rest_body="$rest_dir/body"; rest_status="$rest_dir/status"; rest_stderr="$rest_dir/stderr"
-  rest_get "$(rest_origin)/rest/api/3/issue/$rest_key?fields=summary,status,assignee,updated,description" "$rest_body" "$rest_status" "$rest_stderr" || return 1
+  rest_get "$(rest_origin)/rest/api/3/issue/$rest_key?fields=$DETAIL_FIELDS" "$rest_body" "$rest_status" "$rest_stderr" || return 1
   rest_code=$(sed -n '1p' "$rest_status")
   [ "$rest_code" = 200 ] || { rest_http_failure "$rest_status"; return $?; }
   jq -s -e --arg key "$rest_key" 'length == 1 and (.[0] | type) == "object" and .[0].key == $key and (.[0].fields | type) == "object"' "$rest_body" >/dev/null 2>&1 || return 20
   rest_comments_file="$rest_dir/comments"; : > "$rest_comments_file"; rest_start=0
-  while :; do
+  while [ "$FETCH_COMMENTS" -eq 1 ]; do
     rest_page="$rest_dir/comment-$rest_start"
     rest_get "$(rest_origin)/rest/api/3/issue/$rest_key/comment?startAt=$rest_start&maxResults=100" "$rest_page" "$rest_status" "$rest_stderr" || return 1
     rest_code=$(sed -n '1p' "$rest_status")
@@ -73,5 +73,5 @@ rest_fetch_issue() {
     [ "$rest_count" -gt 0 ] || [ "$rest_start" -ge "$rest_total" ] || return 20
     [ "$rest_count" -gt 0 ] && [ "$rest_start" -lt "$rest_total" ] || break
   done
-  jq -c --slurpfile comments "$rest_comments_file" '{key:.key,summary:(.fields.summary // null),status:(.fields.status // {}),assignee:(.fields.assignee // null),updated:(.fields.updated // null),description:(.fields.description // null),comments:$comments}' "$rest_body"
+  jq -c --slurpfile comments "$rest_comments_file" '.fields + {key:.key,fields:.fields,comments:$comments}' "$rest_body"
 }

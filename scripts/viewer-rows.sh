@@ -76,15 +76,22 @@ trap 'exit 1' 1 2 15
 tmp=$(mktemp "$state/.snapshot.XXXXXX") || exit 1
 candidate_count=0
 key_width=$(awk 'length($0) > n { n=length($0) } END { if (n < 7) n=7; print n }' "$CANDIDATES_FILE")
+picker_fields=${PICKER_FIELDS-status,summary}
+picker_labels=${FIELD_LABELS-}
 while IFS= read -r key || [ -n "$key" ]; do
   validate_key "$key" || continue
   candidate_count=$((candidate_count + 1))
   row=$state/rows/$key
   if [ -s "$row" ]; then
+      if [ -e "$state/failed/$key" ]; then
+        printf '%s\t%-*s  %s%-18s%s  %s%s\n' "$key" "$key_width" "$key" "${VIEWER_DIM:-}" '?' "${VIEWER_RESET:-}" '(could not load)' "${VIEWER_RESET:-}"
+        continue
+      fi
       awk -F '\t' -v reset="${VIEWER_RESET:-}" \
       -v dim="${VIEWER_DIM:-}" -v green="${VIEWER_GREEN:-}" \
       -v yellow="${VIEWER_YELLOW:-}" -v red="${VIEWER_RED:-}" \
-      -v kw="$key_width" 'function clip(s,n) { if (length(s) <= n) return s; if (s ~ /[^ -~]/) return s; return substr(s,1,n-3) "..." } { k=$1; s=clip($2,18); l=tolower($2); c=dim; if (l ~ /^(done|closed|resolved)/) c=green; else if (l ~ /(progress|review|qa|testing)/) c=yellow; else if (l ~ /(block|hold)/) c=red; printf "%s\t%-*s  %s%-18s%s  %s%s\n",k,kw,k,c,s,reset,$3,reset }' "$row"
+      -v kw="$key_width" -v fields="$picker_fields" -v labels="$picker_labels" \
+      -f "$DIR/picker-format.awk" "$row"
   else
     placeholder='fetching...'
     [ "$candidate_count" -le "$MAX_CANDIDATES" ] || placeholder='preview on select'

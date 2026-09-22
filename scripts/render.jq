@@ -1,4 +1,5 @@
 # ADF is rendered node-by-node so unknown attributes can never leak into output.
+include "fields";
 def clean_text: gsub("\r\n|\r"; "\n") | gsub("[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f-\u009f]"; "");
 def metadata: clean_text | gsub("[\r\n\t]+"; " ");
 def trim_breaks: sub("\n+$"; "");
@@ -90,7 +91,7 @@ def adf:
   end;
 
 def human_date:
-  tostring as $d
+  display_value | . as $d
   | if ($d|test("^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]+)?(Z|[+-][0-9]{2}:?[0-9]{2})$")) then
       ($d|capture("^(?<date>[0-9]{4}-[0-9]{2}-[0-9]{2})T(?<time>[0-9]{2}:[0-9]{2})(:[0-9]{2})(\\.[0-9]+)?(?<zone>Z|[+-][0-9]{2}:?[0-9]{2})$") ) as $p
       | ($p.date[5:7]|tonumber) as $month_number
@@ -102,16 +103,136 @@ def human_date:
         end
     else metadata end;
 
-. as $issue | (($issue.status // "(unknown)") | if type=="object" then (.name // .displayName // "(unknown)") else tostring end | metadata) as $status
-| (($issue.assignee // "unassigned") | if type=="object" then (.displayName // .name // "unassigned") else tostring end | metadata) as $assignee
-| (($issue.updated // "(unknown)") | human_date) as $updated
-| (($issue.updated // "(unknown)") | tostring | metadata) as $raw_updated
-| (($issue.summary // "(no summary)")|tostring|metadata) as $summary
-| (($issue.description|adf|trim_breaks)) as $description
-| (($issue.comments // [])|if type=="array" then map(select(type == "object")) else [] end) as $comments
- | ["\($issue.key // "(unknown)") \u00b7 \($status)", $summary,
-    "\($assignee) \u00b7 Updated \($updated)",
-   (if ($preview // false) then empty else "UPDATED   \($raw_updated)", ("LINK      \($url // "")"|metadata) end), "",
-   (if $description != "" then "Description", $description, "" else empty end),
-   (if ($comments|length)>0 then "Comments (\($comments|length))" else if $description=="" then "No description or comments." else empty end end),
-   (if ($comments|length)>0 then $comments[] | ((.author // "")|if type=="object" then (.displayName // .name // "") else tostring end|metadata) as $author | ((.created // "")|human_date) as $created | (.body|adf|trim_breaks) as $body | "\($author)  \($created)", $body, "" else empty end)][]
+def selected($id): (($selected_fields // []) | index($id)) != null;
+def value($id): field_raw($id);
+def field_title($id): field_label($id; ($field_labels // ""));
+def scalar_text($id; $raw):
+  if $raw == null then
+    if $id == "status" then "(unknown)"
+    elif $id == "assignee" then "unassigned"
+    elif $id == "summary" then "(no summary)"
+    else "(not available)" end
+  else
+    ($raw | display_value | clean_text)
+    | if . == "" then
+        if $id == "status" then "(unknown)"
+        elif $id == "assignee" then "unassigned"
+        elif $id == "summary" then "(no summary)"
+        else "(not available)" end
+      else . end
+  end
+  | if ($id == "created" or $id == "updated" or $id == "duedate" or $id == "resolution")
+    then human_date
+    else metadata
+    end;
+def body_text($id; $raw):
+  if $id == "description" then ($raw | adf | trim_breaks)
+  else "" end;
+def valid_comments($raw):
+  if ($raw|type) == "array" then ($raw | map(select(type == "object"))) else [] end;
+def configured_lines($issue; $id; $url; $description; $comments):
+  if $id == "description" then
+    if $description != "" then [field_title($id), $description, ""]
+    else ["\(field_title($id)): (not available)"] end
+  elif $id == "comments" then
+    if ($comments|length) > 0 then
+      ["\(field_title($id)) (\($comments|length))"]
+      + ([ $comments[]
+        | ((.author // "") | display_value | metadata) as $author
+        | ((.created // "") | human_date) as $created
+        | ((.body // (if (.fields|type) == "object" then .fields.body else null end)) | adf | trim_breaks) as $body
+        | ["\($author)  \($created)", $body, ""] ] | add)
+    else ["\(field_title($id)) (0)"] end
+  else
+    (($issue | value($id)) as $field_raw
+      | (if $id == "link" then $url else $field_raw end)) as $raw
+    | if ($raw|type) == "object" and (($raw.type // "") == "doc") then
+        ($raw | adf | trim_breaks) as $rich
+        | if $rich == "" then ["\(field_title($id)): (not available)"]
+          else [field_title($id), $rich, ""] end
+      else ["\(field_title($id)): \(scalar_text($id; $raw))"]
+      end
+  end;
+
+# Custom layouts keep short scalar metadata together so a selected field list
+# reads like a compact facts line. Explicit aliases always remain visible;
+# the small set of values that are self-evident in a picker/detail line do not
+# repeat Jira's stock labels.
+def explicit_field_label($id): (($field_labels // "") | parse_labels | has($id));
+def terse_field($id): $id == "status" or $id == "assignee" or $id == "priority";
+def dense_field_value($id; $raw):
+  if ($raw|type) == "object" and (($raw.type // "") == "doc") then
+    ($raw | adf | trim_breaks | metadata) as $rich
+    | if $rich == "" then "(not available)" else $rich end
+  else
+    (scalar_text($id; $raw)) as $text
+    | if $text == "(not available)" then "—" else $text end
+  end;
+def is_rich_field($issue; $id):
+  (($issue | value($id))
+   | if type == "object" then ((.type // "") == "doc") else false end);
+def dense_segment($issue; $id; $url):
+  (($issue | value($id)) as $field
+   | (if $id == "link" then $url else $field end) as $raw
+   | (dense_field_value($id; $raw)) as $text
+   | if explicit_field_label($id) or (terse_field($id) | not)
+     then "\(field_title($id)): \($text)"
+     else $text
+     end);
+def custom_detail_lines($fields; $issue; $url; $description; $comments):
+  (reduce ($fields[]? | select(. != "key" and . != "summary")) as $id
+    ({lines: [], metadata: []};
+      if $id == "description" or $id == "comments" or is_rich_field($issue; $id) then
+        (.metadata) as $pending
+        | (.lines + (if ($pending|length) > 0 then [($pending | join(" · "))] else [] end)) as $flushed
+        | {lines: ($flushed + configured_lines($issue; $id; $url; $description; $comments)), metadata: []}
+      else
+        .metadata += [dense_segment($issue; $id; $url)]
+      end))
+  | .lines + (if (.metadata|length) > 0 then [(.metadata | join(" · "))] else [] end);
+
+. as $issue
+| (($selected_fields // []) | if type == "array" then . else [] end) as $fields
+| (($issue | value("key")) // "(unknown)" | tostring | metadata) as $key
+| (($issue | value("status")) as $raw_status | scalar_text("status"; $raw_status)) as $status
+| (($issue | value("summary")) as $raw_summary | scalar_text("summary"; $raw_summary)) as $summary
+| (($issue | value("assignee")) as $raw_assignee | scalar_text("assignee"; $raw_assignee)) as $assignee
+| (($issue | value("updated")) as $raw_updated_value | scalar_text("updated"; $raw_updated_value)) as $updated
+| (($issue | value("updated")) | display_value | if . == "" then "(not available)" else . end | metadata) as $raw_updated
+| (($issue | value("description")) as $raw_description | body_text("description"; $raw_description)) as $description
+| (valid_comments(($issue | value("comments")))) as $comments
+| ([ $fields[]? | select(. != "key" and . != "summary") | . as $id
+    | select(explicit_field_label($id)) ] | length > 0) as $selected_label_override
+| (($fields == ["status","assignee","updated","description","comments"]) and ($selected_label_override | not)) as $default_preview
+| (($fields == ["status","assignee","updated","link","description","comments"]) and ($selected_label_override | not)) as $default_reader
+| (($default_preview or $default_reader)) as $default_layout
+| custom_detail_lines($fields; $issue; $url; $description; $comments) as $custom_lines
+| [
+    # Key and summary are the stable detail identity. Status is kept in the
+    # title line only when the user selected it.
+    (if $default_layout and selected("status") then "\($key) \u00b7 \($status)" else $key end),
+    $summary,
+    (if $default_layout then
+       "\($assignee) \u00b7 Updated \($updated)"
+     else $custom_lines[]? end),
+    (if $default_reader then
+       "UPDATED   \($raw_updated)",
+       (($url // "") | tostring | metadata | "LINK      \(.)")
+     else empty end),
+    "",
+    (if $default_layout then
+       if $description == "" and ($comments|length) == 0 then
+         "No description or comments."
+       else
+         (if $description != "" then field_title("description"), $description, "" else empty end),
+         (if ($comments|length) > 0 then "\(field_title("comments")) (\($comments|length))" else empty end),
+         (if ($comments|length) > 0 then
+           ($comments[]
+            | ((.author // "") | display_value | metadata) as $author
+            | ((.created // "") | human_date) as $created
+            | ((.body // (if (.fields|type) == "object" then .fields.body else null end)) | adf | trim_breaks) as $body
+            | "\($author)  \($created)", $body, "")
+          else empty end)
+       end
+     else empty end)
+  ][]

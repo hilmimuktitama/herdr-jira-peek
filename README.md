@@ -14,7 +14,7 @@ captured output from the actual plugin UI; no work session or connected Jira
 site is captured.*
 
 [Quick tour](#quick-tour) ·
-[Install](#install-and-set-up) · [Configure](#configure) ·
+[Install](#install-and-set-up) · [Configure](#configure) · [Customize](#choose-your-fields) ·
 [Controls](#controls-picker-mode) · [Troubleshooting](#troubleshooting)
 
 ## Quick tour
@@ -23,8 +23,8 @@ site is captured.*
    contains allowed issue keys. The most recent visible occurrences have priority;
    the newest issue is selected at the bottom by default, with older issues above.
    Set `PICKER_LAYOUT='top'` to use the original reading direction.
-2. **Choose and preview.** Use the arrow keys or type part of a key, status,
-   or summary. The preview follows your selection.
+2. **Choose and preview.** Use the arrow keys or filter by a key or displayed
+   field. The preview follows your selection.
 3. **Read more, then return.** Press Enter for the full issue reader and `q`
    to return to the picker. Esc closes the picker. Invoke `peek` again while
    that source's viewer is open to toggle only that viewer closed.
@@ -32,7 +32,7 @@ site is captured.*
 | While you work | Peek helps you |
 | --- | --- |
 | Review a commit log or agent output | Read the referenced issue without leaving the terminal |
-| Follow several issue keys in one pane | Filter a deduplicated list by key, status, or summary |
+| Follow several issue keys in one pane | Filter a deduplicated list by key or displayed fields |
 | Need more context | Read descriptions, acceptance criteria, and comments |
 | See new output in the source pane | Press Ctrl-G to rescan in the same viewer |
 | Need to act on an issue | Press Ctrl-O to open Jira in your browser |
@@ -124,15 +124,15 @@ alternative.
 ## TWG usage and pricing (as of September 19, 2026)
 
 Peek uses the official Atlassian TWG CLI's Jira work-item lookup route. Its
-metadata request is equivalent to:
+default metadata request is equivalent to:
 
 ```sh
 twg --mode user --api-version v2 --site YOUR_SITE --output json \
   jira workitem get ISSUE-123 --fields summary,status,assignee,updated
 ```
 
-When you preview an issue without a fresh cached copy, the plugin uses the same
-route with `--comments`:
+With the default fields, previewing an issue without a fresh cached copy uses
+the same route with `--comments`:
 
 ```sh
 twg --mode user --api-version v2 --site YOUR_SITE --output json \
@@ -165,6 +165,9 @@ Atlassian rate limits and permission requirements.
 - `setup` opens a backend-aware setup wizard. It stages a candidate config,
   validates the selected connection, and atomically activates it only on
   success; cancel or failure preserves the working config.
+- `customize` opens an offline field editor. Choose a preset or
+  arrange your own fields, preview fictional data, then save or cancel. It
+  preserves connection settings and does not contact Jira.
 - `install-dependencies` opens a terminal where you choose which backend to
   prepare, then approve each missing package installation. This does not change
   the active connection. It can install fzf, jq, less, and curl with an
@@ -183,7 +186,7 @@ own Peek, including sources in the same workspace or different workspaces.
 Switching agents leaves their viewers open with the current filter, selection,
 and reader intact. Invoking `peek` inside a viewer closes that viewer. Pane
 moves retain the association through the stable terminal ID. The picker shows
-key, status, summary, and the formatted issue preview; descriptions and comments are rendered as readable text.
+key, your selected fields, and the formatted issue preview; descriptions and comments are rendered as readable text.
 
 ## Requirements
 
@@ -232,7 +235,8 @@ herdr plugin install hilmimuktitama/herdr-jira-peek --ref fe7be99d133a3497a46d9a
    yourself with `twg setup` in a terminal. For REST, follow the
    [REST authentication steps](#rest-authentication) below. Rerun
    **Set up Peek for Jira** to check again.
-4. Edit the config using the [configuration guide](#configure), then run
+4. Use **Customize Peek for Jira** to choose fields. Edit connection
+   settings using the [configuration guide](#configure), then run
    **Check Peek for Jira** from Herdr's plugin actions.
 5. Once the check succeeds, focus a pane containing an allowed issue key and
    invoke **Peek for Jira issue from pane**. Add the [keybinding](#keybinding)
@@ -332,7 +336,7 @@ override the scan expression, but every detected key must still match
 be between 1 and 100; 20 is the default metadata preload size, not a limit on
 searchable keys. Older keys show “preview on select” and load their full preview
 when selected. Initially, those rows can be filtered by key only; Ctrl-R loads
-their status and summary into the picker too.
+their configured fields into the picker too.
 
 Choose a reading layout by setting `PICKER_LAYOUT` in the installed `config.sh`:
 
@@ -358,10 +362,44 @@ to leave room for choosing issues and returns when space is available. The
 numbered fallback menu keeps its existing text layout.
 
 The config contains backend, URL, site, project, credential-path, candidate,
-cache, and layout preferences only. Never put an API token, password, cookie,
-or other secret in this file. `config.sh` is parsed as data rather than
-executed: use one supported `NAME=value` assignment per line, quoting string
-values and putting comments on their own lines.
+cache, layout, field, and text preferences only. Never put an API token,
+password, cookie, or other secret in this file. `config.sh` is parsed as data
+rather than executed: use one supported `NAME=value` assignment per line,
+quoting string values and putting comments on their own lines.
+
+### Choose your fields
+
+Open **Customize Peek for Jira**, choose a preset or your own fields, then
+save and reopen Peek. The editor previews fictional data without contacting Jira.
+Colors follow your terminal palette; use Herdr for theme customization.
+
+![Customized fields with a compact preview. All data is fictional.](docs/screenshots/customized.png)
+
+Or edit your private `config.sh`:
+
+```sh
+PICKER_FIELDS='priority,status,summary'
+PREVIEW_FIELDS='status,assignee,customfield_10016,description'
+READER_FIELDS='status,reporter,duedate,description,comments,link'
+FIELD_LABELS='customfield_10016:Points'
+```
+
+Lists set field order. The key stays visible; detail views also retain the
+summary. Custom field IDs depend on your Jira site—the example above is
+fictional. See the [field reference and workflow examples](docs/agent-setup.md#field-reference).
+
+### Ask your AI agent to configure Peek
+
+Copy this prompt and replace the brackets:
+
+> Configure Peek for Jira for [my workflow]. Read `docs/agent-setup.md` in
+> `hilmimuktitama/herdr-jira-peek`. Ask what I need to see at a glance, keep the
+> picker compact, and put supporting context in the reader. Preserve my existing
+> connection settings, apply the configuration, and validate it. Never ask me
+> to paste credentials into chat.
+
+The [agent setup guide](docs/agent-setup.md) covers first-time setup, existing
+installations, custom field IDs, and checking the result.
 
 ### REST authentication
 
@@ -407,26 +445,30 @@ cache** remains available when credentials are revoked or unavailable.
 
 The picker first makes one metadata-only request for up to `MAX_CANDIDATES`
 recent keys (no descriptions or comments). It retains every detected key in the
-list, including keys outside that batch. With TWG:
+list, including keys outside that batch. With TWG and the default picker fields:
 
 ```sh
  twg --mode user --api-version v2 --site "$JIRA_SITE" --output json \
   jira workitem get KEY... --fields summary,status,assignee,updated
 ```
 
-When `JIRA_BACKEND='twg'`, preview uses the full direct-JSON request:
+With the default fields and `JIRA_BACKEND='twg'`, detail uses:
 
 ```sh
  twg --mode user --api-version v2 --site "$JIRA_SITE" --output json \
   jira workitem get KEY --comments
 ```
 
+Custom picker fields change the metadata projection. Custom detail requests
+include `--fields` with the union needed by all three views; supplemental
+`--comments` is included only if the preview or reader selects comments.
+
 When `JIRA_BACKEND='rest'`, the equivalent metadata and detail requests use
 Jira Cloud REST with `curl --netrc-file "$JIRA_NETRC_FILE"`. A cloud ID routes
 through `https://api.atlassian.com/ex/jira/ID`; otherwise the configured
 `JIRA_BASE` host is used. REST never invokes TWG or silently falls back to it.
 Metadata uses the read-only bulk-fetch endpoint; previews fetch issue fields
-and follow comment pagination before caching the result.
+and, when comments are selected, follow comment pagination before caching the result.
 
 TWG output is normalized only when it is one JSON document. Full detail accepts
 only a bare object, a `data` object, or a single-item `data` array whose key
@@ -461,7 +503,7 @@ herdr server reload-config
 ```
 
 The other action IDs are
-`jira-peek.open-browser`, `jira-peek.setup`,
+`jira-peek.open-browser`, `jira-peek.setup`, `jira-peek.customize`,
 `jira-peek.install-dependencies`,
 `jira-peek.doctor`, and
 `jira-peek.clear-cache`.
@@ -471,7 +513,7 @@ The other action IDs are
 | Key | Action |
 | --- | --- |
 | Up / Down | Choose an issue and update its preview |
-| Type | Filter by key, status, or summary |
+| Type | Filter by key or displayed fields |
 | Ctrl-U | Clear the entire filter; type to enter a replacement |
 | Ctrl-W | Delete the previous word in the filter |
 | Ctrl-A / Ctrl-E | Move to the beginning / end of the filter |

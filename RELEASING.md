@@ -53,6 +53,30 @@ old registration and action bindings. GitHub ownership is unchanged. The
 maintainer uses a GitHub noreply address for future commits from this checkout;
 previous public commit history has not been rewritten.
 
+## Version 0.4.0 release validation — 2026-09-23
+
+- [x] Review configurable picker, preview, and reader fields, typed custom
+  values, labels, terminal-native styling, and the offline save/cancel flow.
+  Independent reviews covered runtime, configuration, and documentation.
+- [x] Document AI-assisted configuration, preservation of connection settings,
+  and the need to avoid concurrent edits by other configuration writers.
+- [x] Pass local shell syntax, manifest validation, ShellCheck 0.11.0, and the
+  full runtime suite, including real fzf/less/Expect tests for both layouts.
+  Coverage includes both backends, request projections, cache compatibility,
+  comment suppression, stale viewers, and customizer cancellation and changes
+  to the configuration during editing. No live Jira account was accessed.
+- [x] Review the prospective public tree with Gitleaks 8.30.1; no leaks found.
+  Visually review the four changed or new screenshots, all produced from the
+  isolated fictional fixtures. All nine PNGs have only image chunks, with no
+  embedded metadata or trailing data.
+- [ ] Verify Linux and macOS CI on the release commit.
+- [ ] Publish v0.4.0 from that passing commit and pin README installation to
+  its full SHA with `--ref`.
+
+Existing configurations retain their default fields. Close and reopen viewers
+after updating or changing configuration. The historical intermittent macOS
+PTY timing limitation remains undiagnosed; passing tests do not establish a fix.
+
 ## Version 0.3.0 release validation — 2026-09-19
 
 - [x] Retain TWG as the compatible default and add explicit Jira Cloud REST

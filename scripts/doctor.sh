@@ -7,6 +7,8 @@ umask 077
 . "$(dirname "$0")/dependencies.sh"
 # shellcheck source=scripts/jira-rest.sh
 . "$(dirname "$0")/jira-rest.sh"
+# shellcheck source=scripts/preferences.sh
+. "$(dirname "$0")/preferences.sh"
 
 plugin_id=${HERDR_PLUGIN_ID:-jira-peek}
 config_dir=${HERDR_PLUGIN_CONFIG_DIR:-${HERDR_PLUGIN_STATE_DIR:-${TMPDIR:-/tmp}/herdr-jira-peek}}
@@ -40,6 +42,11 @@ decode_config_value() {
 read_config() {
   JIRA_BASE='' JIRA_SITE='' JIRA_PROJECTS='' JIRA_BACKEND='' JIRA_NETRC_FILE='' JIRA_CLOUD_ID='' CACHE_TTL_MIN='' MAX_CANDIDATES='' KEY_RE=''
   PICKER_LAYOUT=bottom
+  PICKER_FIELDS='status,summary'
+  PREVIEW_FIELDS='status,assignee,updated,description,comments'
+  READER_FIELDS='status,assignee,updated,link,description,comments'
+  FIELD_LABELS=''
+  TEXT_STYLE=bold
   while IFS= read -r config_line || [ -n "$config_line" ]; do
     config_line=$(printf '%s\n' "$config_line" | sed 's/^[[:space:]]*//')
     case "$config_line" in
@@ -84,6 +91,33 @@ read_config() {
         decode_config_value "${config_line#KEY_RE=}" || return 1
         KEY_RE=$config_value
         ;;
+      PICKER_FIELDS=*)
+        decode_config_value "${config_line#PICKER_FIELDS=}" || return 1
+        PICKER_FIELDS=$config_value
+        ;;
+      PREVIEW_FIELDS=*)
+        decode_config_value "${config_line#PREVIEW_FIELDS=}" || return 1
+        PREVIEW_FIELDS=$config_value
+        ;;
+      READER_FIELDS=*)
+        decode_config_value "${config_line#READER_FIELDS=}" || return 1
+        READER_FIELDS=$config_value
+        ;;
+      FIELD_LABELS=*)
+        decode_config_value "${config_line#FIELD_LABELS=}" || return 1
+        FIELD_LABELS=$config_value
+        ;;
+      COLOR_THEME=*)
+        decode_config_value "${config_line#COLOR_THEME=}" || return 1
+        case "$config_value" in
+          terminal|ocean|warm|mono) : ;;
+          *) return 1 ;;
+        esac
+        ;;
+      TEXT_STYLE=*)
+        decode_config_value "${config_line#TEXT_STYLE=}" || return 1
+        TEXT_STYLE=$config_value
+        ;;
       *) return 1 ;;
     esac
   done < "$config_file"
@@ -112,6 +146,11 @@ CACHE_TTL_MIN=${CACHE_TTL_MIN:-}
 MAX_CANDIDATES=${MAX_CANDIDATES:-}
 KEY_RE=${KEY_RE:-}
 PICKER_LAYOUT=${PICKER_LAYOUT-bottom}
+PICKER_FIELDS=${PICKER_FIELDS-'status,summary'}
+PREVIEW_FIELDS=${PREVIEW_FIELDS-'status,assignee,updated,description,comments'}
+READER_FIELDS=${READER_FIELDS-'status,assignee,updated,link,description,comments'}
+FIELD_LABELS=${FIELD_LABELS-}
+TEXT_STYLE=${TEXT_STYLE-bold}
 
 case "$JIRA_BASE" in
   *[[:space:]]*) fail 'JIRA_BASE contains whitespace' ;;
@@ -195,6 +234,31 @@ case "$PICKER_LAYOUT" in
   top|bottom) ok "PICKER_LAYOUT is valid ($PICKER_LAYOUT)" ;;
   *) fail 'PICKER_LAYOUT must be top or bottom' ;;
 esac
+if preferences_validate_field_list picker "$PICKER_FIELDS"; then
+  ok "PICKER_FIELDS is valid (${PICKER_FIELDS:-key only})"
+else
+  fail 'PICKER_FIELDS contains an unsupported, duplicate, or malformed field'
+fi
+if preferences_validate_field_list preview "$PREVIEW_FIELDS"; then
+  ok "PREVIEW_FIELDS is valid (${PREVIEW_FIELDS:-title only})"
+else
+  fail 'PREVIEW_FIELDS contains an unsupported, duplicate, or malformed field'
+fi
+if preferences_validate_field_list reader "$READER_FIELDS"; then
+  ok "READER_FIELDS is valid (${READER_FIELDS:-title only})"
+else
+  fail 'READER_FIELDS contains an unsupported, duplicate, or malformed field'
+fi
+if preferences_validate_labels "$FIELD_LABELS"; then
+  ok 'FIELD_LABELS is valid'
+else
+  fail 'FIELD_LABELS must be comma-separated field:label pairs'
+fi
+if preferences_validate_text_style "$TEXT_STYLE"; then
+  ok "TEXT_STYLE is valid ($TEXT_STYLE)"
+else
+  fail 'TEXT_STYLE must be plain or bold'
+fi
 rest_config_failures=$failures
 
 check_dir_mode() {

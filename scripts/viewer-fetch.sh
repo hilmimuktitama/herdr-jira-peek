@@ -191,7 +191,7 @@ trap 'cleanup_worker; trap - 0; exit 1' 1 2 15
 if fetch "$key" >/dev/null; then
   f=$FETCHED_FILE
   fetch_ok=1
-  if ! jq -r 'def t: tostring | gsub("[\u0000-\u001f\u007f-\u009f]"; " "); [.key, (if (.status | type) == "object" then (.status.name // "?") else "?" end | t), ((.summary // "") | t)] | @tsv' "$f" > "$tmp"; then
+  if ! picker_row "$f" > "$tmp"; then
     fetch_ok=0
     : > "$state/failed/$key"
     printf '%s\t?\t(could not load)\n' "$key" > "$tmp"

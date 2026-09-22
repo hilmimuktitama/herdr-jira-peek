@@ -8,6 +8,8 @@ DIR=${DIR:-$(CDPATH='' cd "$(dirname "${0:-scripts/common.sh}")" 2>/dev/null && 
 STATE="${HERDR_PLUGIN_STATE_DIR:-${TMPDIR:-/tmp}/herdr-jira-peek}"
 CONFIG_DIR="${HERDR_PLUGIN_CONFIG_DIR:-$STATE}"
 CACHE="$STATE/cache"
+# shellcheck source=scripts/preferences.sh
+. "$DIR/preferences.sh"
 
 die() {
   printf 'jira-peek: %s\n' "$*" >&2
@@ -43,6 +45,9 @@ CACHE_TTL_MIN=10
 MAX_CANDIDATES=20
 PICKER_LAYOUT=bottom
 KEY_RE=
+# Config is authoritative; inherited display preferences must not override it.
+unset PICKER_FIELDS PREVIEW_FIELDS READER_FIELDS FIELD_LABELS TEXT_STYLE
+preferences_defaults
 
 # Config is a deliberately small declarative assignment file. Parse the
 # public settings as data instead of executing config.sh as shell code.
@@ -116,6 +121,33 @@ load_config() {
         decode_config_value "${config_line#KEY_RE=}" || die 'invalid KEY_RE assignment in config.sh'
         KEY_RE=$config_value
         ;;
+      PICKER_FIELDS=*)
+        decode_config_value "${config_line#PICKER_FIELDS=}" || die 'invalid PICKER_FIELDS assignment in config.sh'
+        PICKER_FIELDS=$config_value
+        ;;
+      PREVIEW_FIELDS=*)
+        decode_config_value "${config_line#PREVIEW_FIELDS=}" || die 'invalid PREVIEW_FIELDS assignment in config.sh'
+        PREVIEW_FIELDS=$config_value
+        ;;
+      READER_FIELDS=*)
+        decode_config_value "${config_line#READER_FIELDS=}" || die 'invalid READER_FIELDS assignment in config.sh'
+        READER_FIELDS=$config_value
+        ;;
+      FIELD_LABELS=*)
+        decode_config_value "${config_line#FIELD_LABELS=}" || die 'invalid FIELD_LABELS assignment in config.sh'
+        FIELD_LABELS=$config_value
+        ;;
+      COLOR_THEME=*)
+        decode_config_value "${config_line#COLOR_THEME=}" || die 'invalid COLOR_THEME assignment in config.sh'
+        case "$config_value" in
+          terminal|ocean|warm|mono) : ;;
+          *) die 'COLOR_THEME is no longer supported; remove it from config.sh' ;;
+        esac
+        ;;
+      TEXT_STYLE=*)
+        decode_config_value "${config_line#TEXT_STYLE=}" || die 'invalid TEXT_STYLE assignment in config.sh'
+        TEXT_STYLE=$config_value
+        ;;
       *) die 'config.sh may contain only Peek for Jira setting assignments' ;;
     esac
   done < "$config_file"
@@ -124,6 +156,8 @@ load_config() {
 # shellcheck source=scripts/connection.sh
 . "$DIR/connection.sh"
 CONNECTION_CONFIG_DIGEST=$(connection_config_hash) || die 'could not fingerprint config; SHA-256 tooling is required'
+[ -z "${VIEWER_CONFIG_DIGEST:-}" ] || [ "$VIEWER_CONFIG_DIGEST" = "$CONNECTION_CONFIG_DIGEST" ] \
+  || die 'Configuration changed; close and reopen Peek.'
 load_config
 [ "$(connection_config_hash)" = "$CONNECTION_CONFIG_DIGEST" ] || die 'configuration changed while loading; retry'
 
@@ -170,6 +204,9 @@ case "$PICKER_LAYOUT" in
   top|bottom) ;;
   *) die 'PICKER_LAYOUT must be top or bottom' ;;
 esac
+preferences_validate_all || die "$PREFERENCES_ERROR"
+# shellcheck source=scripts/field-plan.sh
+. "$DIR/field-plan.sh"
 # Check configured regular expressions without making a non-match an error.
 regex_status=0
 printf '\n' | grep -Eq "^(${JIRA_PROJECTS})-[0-9]+$" >/dev/null 2>&1 \
@@ -560,7 +597,9 @@ cache_entry_valid() {
     && [ "$CACHE_TTL_MIN" -gt 0 ] \
     && [ -n "$(find "$cache_file" -mmin -"$CACHE_TTL_MIN" -print 2>/dev/null)" ] \
     && jq -s -e --arg requested_key "$cache_key" \
-      'length == 1 and ((.[0] | type) == "object") and .[0].key == $requested_key' \
+      --arg request "$FIELD_REQUEST_SIGNATURE" --argjson legacy "$LEGACY_FIELD_REQUEST" \
+      'length == 1 and ((.[0] | type) == "object") and .[0].key == $requested_key
+       and (.[0]._peek_request == $request or ($legacy == 1 and (.[0] | has("_peek_request") | not)))' \
       "$cache_file" >/dev/null 2>&1
 }
 
@@ -1111,7 +1150,7 @@ run_twg_metadata_batch() {
 
   metadata_status=0
   "$TWG" --mode user --api-version v2 --site "$JIRA_SITE" --output json \
-    jira workitem get "$@" --fields summary,status,assignee,updated \
+    jira workitem get "$@" --fields "$METADATA_FIELDS" \
     > "$metadata_raw" 2> "$metadata_stderr" || metadata_status=$?
   return "$metadata_status"
 }
@@ -1123,7 +1162,7 @@ run_rest_metadata_batch() (
   trap 'exit 1' 1 2 15
   rest_metadata_dir=$rest_dir
   rest_payload="$rest_dir/payload"; rest_status="$rest_dir/status"
-  jq -Rn '[inputs | select(length > 0)] | {issueIdsOrKeys: ., fields:["summary","status","assignee","updated"]}' "$metadata_keys_file" > "$rest_payload" || { rm -rf "$rest_dir"; return 1; }
+  jq -Rn --arg fields "$METADATA_FIELDS" '[inputs | select(length > 0)] | {issueIdsOrKeys: ., fields:($fields | split(","))}' "$metadata_keys_file" > "$rest_payload" || { rm -rf "$rest_dir"; return 1; }
   # shellcheck source=scripts/jira-rest.sh
   . "$DIR/jira-rest.sh"
   rest_validate_auth || { rest_status_code=$?; rm -rf "$rest_dir"; return "$rest_status_code"; }
@@ -1145,21 +1184,30 @@ run_metadata_batch() {
   return "$batch_connection_status"
 }
 
+# Convert a canonical issue to the same configurable TSV used by batch rows.
+picker_row() {
+  jq -r -L "$DIR" --arg fields "$PICKER_FIELDS" '
+    include "fields";
+    . as $issue | [(.key | field_clean)] +
+      ($fields | split(",") | map(select(length > 0) | . as $id
+        | $issue | field_value($id)
+        | if . == "" and $id == "status" then "?" else . end)) | join("\t")
+  ' "$1"
+}
+
 metadata_row() {
   metadata_source=${1:-}
   metadata_requested_key=${2:-}
   [ -r "$metadata_source" ] || return 1
-  if [ "$JIRA_BACKEND" = rest ]; then
-    jq -r -s -e --arg requested_key "$metadata_requested_key" '
-      if (length == 1 and (.[0] | type) == "object" and (.[0].issues | type) == "array") then .[0].issues[] | select(type == "object" and .key == $requested_key and (.fields | type) == "object")
-        | def t: tostring | gsub("[\u0000-\u001f\u007f-\u009f]"; " ");
-          [.key, ((if (.fields.status | type) == "object" then .fields.status.name // "?" else "?" end) | t), ((.fields.summary // "") | t)] | @tsv
-        else empty end' "$metadata_source"
-    return
-  fi
-  jq -r -s -e --arg requested_key "$metadata_requested_key" '
+  jq -r -s -e -L "$DIR" --arg requested_key "$metadata_requested_key" \
+    --arg fields "$PICKER_FIELDS" --arg backend "$JIRA_BACKEND" '
+    include "fields";
     def docs:
       if length != 1 then []
+      elif $backend == "rest" then
+        if (.[0] | type) == "object" and (.[0].issues | type) == "array" then
+          [.[0].issues[] | select(type == "object" and (.fields | type) == "object")]
+        else [] end
       elif (.[0] | type) == "array" then .[0]
       elif (.[0] | type) != "object" then []
       elif (.[0].data | type) == "array" then .[0].data
@@ -1168,13 +1216,11 @@ metadata_row() {
       elif (.[0].data | type) == "object" then [.[0].data]
       else [.[0]]
       end;
-    def text: tostring | gsub("[\u0000-\u001f\u007f-\u009f]"; " ");
-    docs[]
-    | select(type == "object" and .key == $requested_key)
-    | [(.key | text),
-       (if (.status | type) == "object" then (.status.name // "?") else (.status // "?") end | text),
-       ((.summary // "") | text)]
-    | @tsv
+    docs[] | select(type == "object" and .key == $requested_key) as $issue
+    | [($issue.key | field_clean)] +
+      ($fields | split(",") | map(select(length > 0) | . as $id
+        | $issue | field_value($id)
+        | if . == "" and $id == "status" then "?" else . end)) | join("\t")
   ' "$metadata_source"
 }
 
@@ -1246,8 +1292,11 @@ fetch() {
       rm -rf "$rest_dir"
     fi
   else
+    set --
+    if [ "$LEGACY_FIELD_REQUEST" -eq 0 ]; then set -- --fields "$DETAIL_FIELDS"; fi
+    if [ "$FETCH_COMMENTS" -eq 1 ]; then set -- "$@" --comments; fi
     "$TWG" --mode user --api-version v2 --site "$JIRA_SITE" --output json \
-      jira workitem get "$key" --comments > "$raw" 2> "$stderr" \
+      jira workitem get "$key" "$@" > "$raw" 2> "$stderr" \
       || twg_status=$?
   fi
   connection_assert_current --identity || { rm -f "$raw" "$stderr" "$normalized"; return 1; }
@@ -1302,7 +1351,7 @@ fetch() {
   # Direct JSON may be an issue object. Accept a single data wrapper, including
   # TWG's single-item data array, but never accept multiple documents/issues or
   # an output-files envelope.
-  if ! jq -s -e --arg requested_key "$key" '
+  if ! jq -s -e --arg requested_key "$key" --arg request "$FIELD_REQUEST_SIGNATURE" '
     if length != 1 or (.[0] | type) != "object" then
       error("unexpected JSON response")
     else
@@ -1313,7 +1362,8 @@ fetch() {
           else $doc
           end) as $issue
       | if ($issue | type) == "object" and $issue.key == $requested_key
-        then $issue
+        then (if ($issue.fields | type) == "object" then $issue.fields + $issue else $issue end)
+          | ._peek_request = $request
         else error("unexpected issue JSON")
         end
     end

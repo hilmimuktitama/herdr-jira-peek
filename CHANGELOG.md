@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.4.0 — 2026-09-23
+
+- Add ordered field configuration for the picker, preview, and reader, including
+  Jira custom fields and friendly labels.
+- Add an offline Customize action with presets, a fictional preview, validation,
+  and atomic save/cancel behavior that preserves connection settings.
+- Keep terminal-native colors, with optional plain text and an authoritative
+  `NO_COLOR` override. Keep picker rows and detail metadata compact.
+- Document workflow-based setup and configuration for users and their AI agents.
+- Request configured fields through TWG and REST, skip supplemental comments
+  when hidden in both detail views, and track field coverage in cached issues.
+
 ## 0.3.0 — 2026-09-19
 
 - Add an explicit optional Jira Cloud REST backend with external netrc

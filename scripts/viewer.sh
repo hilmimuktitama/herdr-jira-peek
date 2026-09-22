@@ -7,9 +7,14 @@ set -eu
 . "$(dirname "$0")/common.sh"
 require_fzf
 require_backend
+# shellcheck source=scripts/style.sh
+. "$DIR/style.sh"
+peek_style
+export TEXT_STYLE
 DIR=$(CDPATH= cd "$(dirname "$0")" && pwd)
 export DIR
 export VIEWER_CONNECTION_ID="$CONNECTION_ID" VIEWER_CONNECTION_EPOCH="$CONNECTION_EPOCH"
+export VIEWER_CONFIG_DIGEST="$CONNECTION_CONFIG_DIGEST"
 export CONNECTION_ID CONNECTION_EPOCH CONNECTION_CONFIG_DIGEST CONNECTION_AUTH_DIGEST
 export JIRA_BACKEND JIRA_NETRC_FILE CONFIG_DIR STATE
 # Snapshot the preference once so resize/help callbacks stay lightweight.
@@ -110,10 +115,10 @@ unset VIEWER_METADATA_MODE VIEWER_COORDINATOR_PID
 
 # Prepare an initial snapshot, then load a capped metadata batch. Full issue
 # detail is fetched lazily when selected for preview or reading.
-if [ -n "${NO_COLOR:-}" ]; then
+if [ "$PEEK_COLOR" -eq 0 ]; then
   printf '  found %s issue(s); loading recent issue details...\n' "$n"
 else
-  printf '\033[2m  found %s issue(s); loading recent issue details...\033[0m\n' "$n"
+  printf '%s  found %s issue(s); loading recent issue details...%s\n' "$PEEK_DIM" "$n" "$PEEK_RESET"
 fi
 unset FZF_API_KEY
 stop_tree() {
@@ -146,22 +151,8 @@ viewer_signal() { viewer_cleanup; trap - 0; exit 1; }
 trap viewer_signal 1 2 15
 
 # Row = KEY<TAB>display. fzf shows the display and hands scripts the key as {1}.
-if [ -n "${NO_COLOR:-}" ]; then
-  bold=
-  reset=
-  dim=
-  green=
-  yellow=
-  red=
-else
-  bold=$(printf '\033[1m')
-  reset=$(printf '\033[0m')
-  dim=$(printf '\033[2m')
-  green=$(printf '\033[32m')
-  yellow=$(printf '\033[33m')
-  red=$(printf '\033[31m')
-fi
-export VIEWER_BOLD="$bold" VIEWER_RESET="$reset" VIEWER_DIM="$dim" VIEWER_GREEN="$green" VIEWER_YELLOW="$yellow" VIEWER_RED="$red"
+export VIEWER_BOLD="$PEEK_BOLD" VIEWER_RESET="$PEEK_RESET" VIEWER_DIM="$PEEK_DIM"
+export VIEWER_GREEN="$PEEK_GREEN" VIEWER_YELLOW="$PEEK_YELLOW" VIEWER_RED="$PEEK_RED"
 sh "$DIR/viewer-rows.sh" snapshot "$viewer_state/snapshot"
 fzf_help=$(env -u FZF_DEFAULT_OPTS -u FZF_DEFAULT_COMMAND -u FZF_DEFAULT_OPTS_FILE fzf --help 2>&1 || true)
 if printf '%s\n' "$fzf_help" | grep -q -- '--footer'; then modernfooter=1; else modernfooter=0; fi
@@ -248,7 +239,8 @@ run_picker_chrome() {
   if [ -n "$footer_args" ]; then
     set -- "$@" --footer "$footer" --footer-border=none
   fi
-  [ -n "${highlight_arg:-}" ] && set -- "$@" "$highlight_arg" --no-bold
+  [ -n "${highlight_arg:-}" ] && set -- "$@" "$highlight_arg"
+  set -- "$@" --no-bold
   [ -n "${gutter_arg:-}" ] && set -- "$@" --gutter ' '
   [ -n "${shell_arg:-}" ] && set -- "$@" --with-shell '/bin/sh -c'
   [ -n "${resize_binding:-}" ] && set -- "$@" --bind "$resize_binding"
