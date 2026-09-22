@@ -5,7 +5,7 @@ Plugin ID: `jira-peek`.
 
 The repository became public on 2026-09-07. Version `0.2.0` was published on
 2026-09-08 as the first versioned release; `0.1.0` was the development baseline.
-The latest release is `0.3.0`, published on 2026-09-19. This project has no
+The latest release is `0.4.0`, published on 2026-09-23. This project has no
 publish automation.
 
 ## Before making the repository public
@@ -65,13 +65,17 @@ previous public commit history has not been rewritten.
   Coverage includes both backends, request projections, cache compatibility,
   comment suppression, stale viewers, and customizer cancellation and changes
   to the configuration during editing. No live Jira account was accessed.
-- [x] Review the prospective public tree with Gitleaks 8.30.1; no leaks found.
+- [x] Review the prospective public tree and release commit with Gitleaks 8.30.1;
+  no leaks found.
   Visually review the four changed or new screenshots, all produced from the
   isolated fictional fixtures. All nine PNGs have only image chunks, with no
   embedded metadata or trailing data.
-- [ ] Verify Linux and macOS CI on the release commit.
-- [ ] Publish v0.4.0 from that passing commit and pin README installation to
-  its full SHA with `--ref`.
+- [x] Verify Linux and macOS CI on release commit
+  `b494dab4876b95f21b089ed7c04e8e7890edadb1`: both jobs passed on their first
+  attempt in [run 35766489529](https://github.com/hilmimuktitama/herdr-jira-peek/actions/runs/35766489529).
+- [x] Publish [v0.4.0](https://github.com/hilmimuktitama/herdr-jira-peek/releases/tag/v0.4.0)
+  from that commit and pin README installation to its full SHA with `--ref`.
+  The subsequent documentation commit records publication; it changes no runtime code.
 
 Existing configurations retain their default fields. Close and reopen viewers
 after updating or changing configuration. The historical intermittent macOS

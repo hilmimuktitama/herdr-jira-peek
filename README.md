@@ -217,7 +217,7 @@ The command below installs the full reviewed commit SHA for this release.
 With Herdr and git installed, install the plugin:
 
 ```sh
-herdr plugin install hilmimuktitama/herdr-jira-peek --ref fe7be99d133a3497a46d9ae5d0ca61969e58581f
+herdr plugin install hilmimuktitama/herdr-jira-peek --ref b494dab4876b95f21b089ed7c04e8e7890edadb1
 ```
 
 1. Select **Set up Peek for Jira** from Herdr's plugin actions. The wizard
