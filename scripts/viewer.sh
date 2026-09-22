@@ -158,6 +158,10 @@ fzf_help=$(env -u FZF_DEFAULT_OPTS -u FZF_DEFAULT_COMMAND -u FZF_DEFAULT_OPTS_FI
 if printf '%s\n' "$fzf_help" | grep -q -- '--footer'; then modernfooter=1; else modernfooter=0; fi
 export VIEWER_MODERN_FOOTER=$modernfooter
 export VIEWER_HAS_FOOTER=$modernfooter
+VIEWER_PREVIEW_WRAP=wrap
+if printf '%s\n' "$fzf_help" | grep -Fq '[,[no]wrap[-word]]'; then VIEWER_PREVIEW_WRAP=wrap-word; fi
+export VIEWER_PREVIEW_WRAP
+if printf '%s\n' "$fzf_help" | grep -q -- '--preview-wrap-sign'; then preview_wrap_sign_arg=1; else preview_wrap_sign_arg=; fi
 if printf '%s\n' "$fzf_help" | grep -q -- '--id-nth' \
   && printf '%s\n' "$fzf_help" | grep -q -- '--track'; then
   fzf_tracking=1
@@ -241,6 +245,7 @@ run_picker_chrome() {
   fi
   [ -n "${highlight_arg:-}" ] && set -- "$@" "$highlight_arg"
   set -- "$@" --no-bold
+  [ -n "${preview_wrap_sign_arg:-}" ] && set -- "$@" --preview-wrap-sign ''
   [ -n "${gutter_arg:-}" ] && set -- "$@" --gutter ' '
   [ -n "${shell_arg:-}" ] && set -- "$@" --with-shell '/bin/sh -c'
   [ -n "${resize_binding:-}" ] && set -- "$@" --bind "$resize_binding"
@@ -280,7 +285,8 @@ resize_binding=
 if [ "$modernfooter" -eq 1 ]; then
   load_binding='load:transform-header(sh "$DIR/viewer-rows.sh" header)+transform-prompt(sh "$DIR/viewer-rows.sh" prompt)+transform(sh "$DIR/viewer-ui.sh" relayout)'
   # Divider drags can flood fzf's resize queue. Compute chrome off the input
-  # loop, then apply the footer and preview together without shell callbacks.
+  # loop, then apply the footer and preview together without restarting the
+  # preview command; fzf reflows its current preview buffer on resize.
   resize_binding='resize:bg-transform(sh "$DIR/viewer-ui.sh" resize)'
 fi
 # Footer and background transforms both arrived in fzf 0.63. Keep the scan

@@ -1,7 +1,14 @@
 # Configure Peek with an AI agent
 
-Give your agent the prompt in the [README](../README.md#ask-your-ai-agent-to-configure-peek)
-and describe the work you do. This guide is for the agent carrying out that setup.
+Give your agent this prompt and describe the work you do:
+
+> Configure Peek for Jira for [my workflow]. Read `docs/agent-setup.md` in
+> `hilmimuktitama/herdr-jira-peek`. Ask what I need to see at a glance, keep the
+> picker compact, and put supporting context in the reader. Preserve my existing
+> connection settings, apply the configuration, and validate it. Never ask me
+> to paste credentials into chat.
+
+The rest of this guide is for the agent carrying out that setup.
 
 ## Start with the user's workflow
 

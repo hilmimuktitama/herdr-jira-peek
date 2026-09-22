@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.4.1 — 2026-09-23
+
+- Reflow the retained preview during pane resizing, preserving the filter,
+  selection, and reading position without restarting the renderer or Jira work.
+- Keep long paragraphs and unbroken Unicode text pageable with a bounded
+  reading width. Use native word wrapping where available and hide the preview
+  when the pane is too small to read it.
+- Open quietly during fast scans; show progress only for slower scans and
+  cancel pending feedback before opening, including a blocked notification.
+- Correct the space reserved for expanded help. Cover scrolled resizing,
+  long paragraphs, refresh isolation, tiny-pane recovery, and rapid divider
+  drags with real fzf terminal regressions and fictional data.
+- Simplify the README around setup, daily controls, and configuration. Remove
+  obsolete migration and billing notes, and link detailed guidance separately.
+- Preserve the startup redraw workaround for initial clipping on older Herdr
+  versions. Source-pane flicker during split creation remains a host-level
+  investigation; this change does not claim to resolve it fully.
+
 ## 0.4.0 — 2026-09-23
 
 - Add ordered field configuration for the picker, preview, and reader, including
@@ -118,8 +136,7 @@ First versioned release, including the initial feature set below.
   TWG minimum version and authentication/connectivity. Preserve config on reruns.
 - Add an interactive dependency installer with per-install approval and separate
   user-managed TWG OAuth login. Refuse to open the picker when TWG is missing.
-- Use the neutral plugin ID `jira-peek`. Existing development installations
-  need to [migrate their registration, settings, and bindings](README.md#migrate-from-the-old-plugin-id).
+- Use the neutral plugin ID `jira-peek`.
 - Accept security reports through GitHub private vulnerability reporting,
   with the maintainer's public email retained as an alternative.
 - Scan the current Herdr pane for Jira Cloud issue keys, with an explicit

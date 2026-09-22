@@ -45,14 +45,6 @@ publish automation.
 - [ ] Confirm the reporting inbox receives private security and conduct reports;
   delivery has not been independently tested.
 
-## Plugin identity
-
-The plugin now uses the neutral ID `jira-peek`. Existing users must follow
-[the migration guide](README.md#migrate-from-the-old-plugin-id) to replace the
-old registration and action bindings. GitHub ownership is unchanged. The
-maintainer uses a GitHub noreply address for future commits from this checkout;
-previous public commit history has not been rewritten.
-
 ## Version 0.4.0 release validation — 2026-09-23
 
 - [x] Review configurable picker, preview, and reader fields, typed custom

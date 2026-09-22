@@ -15,12 +15,19 @@ function display_length(text,    i, ch, total, advance) {
   return total
 }
 
-function fit_chars(text, limit,    i, piece) {
+function fit_chars(text, limit,    i, piece, count) {
   if (limit < 1) return 0
   piece = ""
   for (i = 1; i <= length(text); i++) {
     piece = piece substr(text, i, 1)
-    if (display_length(piece) > limit) return i - 1
+    if (display_length(piece) > limit) {
+      count = i - 1
+      # LC_ALL=C counts bytes. Never put a newline inside a UTF-8 character
+      # when bounding a preview's long unbroken words.
+      while (bounded_preview && count > 0 && substr(text, count + 1, 1) ~ /[\200-\277]/)
+        count--
+      return count
+    }
   }
   return length(text)
 }
@@ -92,10 +99,13 @@ function emit(text,    styled) {
     }
   }
 
-  if (display_length(first_prefix) >= width) {
+  prefix_limit = width
+  # Leave room for a complete UTF-8 character even after deep indentation.
+  if (bounded_preview) prefix_limit = width - 3
+  if (display_length(first_prefix) >= prefix_limit) {
     first_prefix = ""
     continuation_prefix = ""
-  } else if (display_length(continuation_prefix) >= width) {
+  } else if (display_length(continuation_prefix) >= prefix_limit) {
     continuation_prefix = ""
   }
 
@@ -134,7 +144,7 @@ function emit(text,    styled) {
     if (!has_content) pending = ""
 
     while (length(word) > 0) {
-      if (has_non_ascii(word) && \
+      if (!bounded_preview && has_non_ascii(word) && \
         display_length(word) > width - display_length(current)) {
         if (display_length(word) <= width) {
           current = word

@@ -25,6 +25,12 @@ exit 0}
   close $u
   exec chmod 700 [file join $bin $utility]
 }
+set shell_wrapper [open [file join $bin sh] w]
+puts $shell_wrapper {#!/bin/sh
+case " $* " in *viewer-preview.sh*) printf '%s\n' "$*" >> "$PTY_PREVIEW_LOG" ;; esac
+exec /bin/sh "$@"}
+close $shell_wrapper
+exec chmod 700 [file join $bin sh]
 if {[string length [file normalize $state]] <= 104} { puts stderr "long state path is not long enough"; exit 1 }
 
 set f [open [file join $config config.sh] w]
@@ -41,7 +47,12 @@ set f [open [file join $state candidates] w]
 for {set i 1} {$i <= 11} {incr i} { puts $f "ABC-$i" }
 close $f
 
-file link -symbolic [file join $bin fzf] $real_fzf
+set f [open [file join $bin fzf] w]
+puts $f {#!/bin/sh
+exec "$PTY_REAL_FZF" "$@" --bind 'alt-q:execute-silent(printf %s {q} > "$PTY_QUERY_CAPTURE.pending" && mv "$PTY_QUERY_CAPTURE.pending" "$PTY_QUERY_CAPTURE")'
+}
+close $f
+exec chmod 700 [file join $bin fzf]
 file link -symbolic [file join $bin less] $real_less
 set h [open [file join $bin herdr] w]
 puts $h {#!/bin/sh
@@ -88,6 +99,11 @@ body="PTY body $key version $count"
 i=1
 while [ "$key" != ABC-17 ] && [ "$i" -le 60 ]; do body="$body
 Preview line $i"; i=$((i + 1)); done
+paragraph=
+i=1
+while [ "$i" -le 120 ]; do paragraph="$paragraph REFLOW-WORD-$i"; i=$((i + 1)); done
+body="$body
+REFLOW-BEGIN$paragraph REFLOW-END"
 jq -n --arg key "$key" --arg body "$body" '{key:$key,summary:$key,description:$body,status:{name:"Done"}}'
 }
 close $t
@@ -100,6 +116,9 @@ set env(HERDR_PLUGIN_CONFIG_DIR) $config
 set env(HERDR_PLUGIN_STATE_DIR) $state
 set env(PTY_COUNTS) $counts
 set env(PTY_SOURCE) $source
+set env(PTY_PREVIEW_LOG) [file join $tmp preview.log]
+set env(PTY_REAL_FZF) $real_fzf
+set env(PTY_QUERY_CAPTURE) [file join $tmp captured-query]
 set env(PTY_HERDR_LOG) [file join $tmp herdr.log]
 set env(HERDR_BIN_PATH) [file join $bin herdr]
 set env(HERDR_VIEWER_SOURCE_PANE) source-pane
@@ -167,6 +186,34 @@ proc await_help_state {desired phase} {
   stop_child
   exit 1
 }
+proc await_layout {expected phase} {
+  global state spawn_id spawn_out observed_output timeout
+  set previous_timeout $timeout
+  set timeout 0
+  set deadline [expr {[clock milliseconds] + 5000}]
+  set path [file join [lindex [glob -nocomplain -directory $state .viewer.*] 0] ui-layout]
+  while {[clock milliseconds] < $deadline} {
+    # Keep draining the PTY while the fzf background resize transform runs.
+    # If the master stops reading, fzf can block flushing the new screen and
+    # never process the resize event we are waiting for.
+    expect {
+      -re {(?s).*?\033\[6n} { observe $expect_out(buffer); send -i $spawn_id "\033\[1;1R" }
+      -re {(?s).+} { observe $expect_out(buffer) }
+      eof { break }
+      timeout {}
+    }
+    if {[file exists $path] && [string match $expected [string trim [slurp $path]]]} { set timeout $previous_timeout; return }
+    after 20
+  }
+  set actual_layout unknown
+  if {[file exists $path]} { set actual_layout [string trim [slurp $path]] }
+  set terminal_size unknown
+  catch { set terminal_size [string trim [exec stty size < $spawn_out(slave,name)]] }
+  puts stderr "PTY timeout: $phase layout expected=$expected actual=$actual_layout stty_size=$terminal_size"
+  set timeout $previous_timeout
+  stop_child
+  exit 1
+}
 proc await_selected_key {key} {
   global spawn_id state
   set timeout 0
@@ -182,7 +229,30 @@ proc await_selected_key {key} {
     if {[file exists $key_file] && [string trim [slurp $key_file]] eq $key} { return }
     after 5
   }
-  puts stderr "PTY timeout: selection burst"; stop_child; exit 1
+  set selected_path [file join $state sources source-source-terminal key]
+  set selected_value [expr {[file exists $selected_path] ? [string trim [slurp $selected_path]] : "(missing)"}]
+  puts stderr "PTY timeout: selection burst desired=$key actual=$selected_value"; stop_child; exit 1
+}
+proc capture_query {phase} {
+  global spawn_id tmp
+  set path [file join $tmp captured-query]
+  file delete -force $path
+  send -i $spawn_id "\033q"
+  set timeout 0
+  set deadline [expr {[clock milliseconds] + 5000}]
+  while {[clock milliseconds] < $deadline} {
+    expect {
+      -re {(?s).*?\033\[6n} { observe $expect_out(buffer); send -i $spawn_id "\033\[1;1R" }
+      -re {(?s).+} { observe $expect_out(buffer) }
+      eof { puts stderr "PTY EOF: $phase query capture"; stop_child; exit 1 }
+      timeout {}
+    }
+    if {[file exists $path]} { return [slurp $path] }
+    after 5
+  }
+  puts stderr "PTY timeout: $phase query capture"
+  stop_child
+  exit 1
 }
 proc await_feedback_clear {phase} {
   global spawn_id state
@@ -205,58 +275,62 @@ proc await_feedback_clear {phase} {
   puts stderr "PTY timeout: $phase feedback did not expire"; stop_child; exit 1
 }
 proc await {phase pattern} {
-  global spawn_id state tmp observed_output
+  global spawn_id state tmp observed_output spawn_out timeout
   if {[regexp $pattern $observed_output]} { return }
-  expect {
-    -re $pattern { observe $expect_out(buffer); return }
-      -re "\033\\\[6n" { observe $expect_out(buffer); send -i $spawn_id "\033\[1;1R"; exp_continue }
-    timeout {
-      catch {
-        set dirs [glob -nocomplain -directory $state .viewer.*]
-        set diag_state $state
-        if {$dirs ne ""} { set diag_state [lindex $dirs 0] }
-        set out [open [file join $tmp pty-failure-candidates] w]
-        if {[file exists [file join $diag_state candidates]]} { puts -nonewline $out [slurp [file join $diag_state candidates]] }
-        close $out
-        set out [open [file join $tmp pty-failure-status] w]
-        if {[file exists [file join $diag_state status]]} { puts -nonewline $out [slurp [file join $diag_state status]] }
-        close $out
-       if {$dirs ne ""} {
-         set err [file join $diag_state fzf-stderr]
-         if {[file exists $err]} { file copy -force $err [file join $tmp pty-failure-stderr] }
-       }
-        set preview_lines [regexp -all -inline {Preview line [0-9]+} [expr {[info exists expect_out(buffer)] ? $expect_out(buffer) : ""}]]
-        set preview_positions [regexp -all -inline {[0-9]+/66} [expr {[info exists expect_out(buffer)] ? $expect_out(buffer) : ""}]]
-        set rows [glob -nocomplain -directory [file join $diag_state rows] *]
-        set layout [expr {[file exists [file join $diag_state ui-layout]] ? [slurp [file join $diag_state ui-layout]] : "(missing)"}]
-        puts stderr "PTY diagnostic detail $phase: preview_lines=$preview_lines preview_positions=$preview_positions rows=[llength $rows] pending_snapshot=[file exists [file join $diag_state pending-snapshot]] ui_layout=$layout"
-      }
-      set viewer_present 0
-      if {[info exists dirs] && $dirs ne ""} { set viewer_present 1 }
-      puts stderr "PTY diagnostic $phase: viewer=$viewer_present candidates=[file exists [file join $diag_state candidates]] status=[file exists [file join $diag_state status]] herdr_log=[file exists [file join $tmp herdr.log]]"
-      set output [expr {[info exists expect_out(buffer)] ? $expect_out(buffer) : "(no terminal output)"}]
-      set sample [string map [list "\033" "<ESC>" "\r" "<CR>" "\n" "<LF>"] $output]
-      set start [expr {[string length $sample] > 240 ? [string length $sample] - 240 : 0}]
-      puts stderr "PTY timeout: $phase [string range $sample $start end]"
-      stop_child; exit 1
+  set previous_timeout $timeout
+  set timeout 0
+  set deadline [expr {[clock milliseconds] + 15000}]
+  set saw_eof 0
+  while {[clock milliseconds] < $deadline && !$saw_eof} {
+    expect {
+      -re {(?s).*?\033\[6n} { observe $expect_out(buffer); send -i $spawn_id "\033\[1;1R" }
+      -re {(?s).+} { observe $expect_out(buffer) }
+      eof { if {[info exists expect_out(buffer)]} { observe $expect_out(buffer) }; set saw_eof 1 }
+      timeout {}
     }
-    eof {
-      set output [expr {[info exists expect_out(buffer)] ? $expect_out(buffer) : "(no terminal output)"}]
-      set sample [string map [list "\033" "<ESC>" "\r" "<CR>" "\n" "<LF>"] $output]
-      set start [expr {[string length $sample] > 240 ? [string length $sample] - 240 : 0}]
-      puts stderr "PTY EOF: $phase [string range $sample $start end]"
-      stop_child; exit 1
+    if {[regexp $pattern $observed_output]} { set timeout $previous_timeout; return }
+    after 5
+  }
+  set timeout $previous_timeout
+  set dirs [glob -nocomplain -directory $state .viewer.*]
+  set diag_state $state
+  if {$dirs ne ""} { set diag_state [lindex $dirs 0] }
+  catch {
+    set out [open [file join $tmp pty-failure-candidates] w]
+    if {[file exists [file join $diag_state candidates]]} { puts -nonewline $out [slurp [file join $diag_state candidates]] }
+    close $out
+    set out [open [file join $tmp pty-failure-status] w]
+    if {[file exists [file join $diag_state status]]} { puts -nonewline $out [slurp [file join $diag_state status]] }
+    close $out
+    if {$dirs ne ""} {
+      set err [file join $diag_state fzf-stderr]
+      if {[file exists $err]} { file copy -force $err [file join $tmp pty-failure-stderr] }
     }
   }
+  set preview_lines [regexp -all -inline {Preview line [0-9]+} $observed_output]
+  set preview_positions [regexp -all -inline {[0-9]+/[0-9]+} $observed_output]
+  set rows [glob -nocomplain -directory [file join $diag_state rows] *]
+  set layout [expr {[file exists [file join $diag_state ui-layout]] ? [slurp [file join $diag_state ui-layout]] : "(missing)"}]
+  puts stderr "PTY diagnostic detail $phase: preview_lines=$preview_lines preview_positions=$preview_positions rows=[llength $rows] pending_snapshot=[file exists [file join $diag_state pending-snapshot]] ui_layout=$layout"
+  set terminal_size unknown
+  catch { set terminal_size [string trim [exec stty size < $spawn_out(slave,name)]] }
+  set terminal_groups unknown
+  catch { set terminal_groups [string trim [exec ps -o pid=,pgid=,tpgid= -p [exp_pid -i $spawn_id]]] }
+  puts stderr "PTY diagnostic $phase: terminal_size=$terminal_size process_groups=$terminal_groups saw_eof=$saw_eof"
+  set sample [string map [list "\033" "<ESC>" "\r" "<CR>" "\n" "<LF>"] $observed_output]
+  set start [expr {[string length $sample] > 240 ? [string length $sample] - 240 : 0}]
+  puts stderr "PTY [expr {$saw_eof ? "EOF" : "timeout"}]: $phase [string range $sample $start end]"
+  stop_child
+  exit 1
 }
 proc await_initial_preview {} {
   global spawn_id observed_output
   set body_seen [regexp {PTY body ABC-1 version 1} $observed_output]
-  set full_preview_seen [regexp {1/66} $observed_output]
+  set full_preview_seen [regexp {1/[0-9]+} $observed_output]
   if {$body_seen && $full_preview_seen} { return }
   expect {
     -re "PTY body ABC-1 version 1" { observe $expect_out(buffer); set body_seen 1; if {$full_preview_seen} { return }; exp_continue }
-    -re {1/66} { observe $expect_out(buffer); set full_preview_seen 1; if {$body_seen} { return }; exp_continue }
+    -re {1/[0-9]+} { observe $expect_out(buffer); set full_preview_seen 1; if {$body_seen} { return }; exp_continue }
     -re "\033\\\[6n" { observe $expect_out(buffer); send -i $spawn_id "\033\[1;1R"; exp_continue }
     eof { puts stderr "PTY EOF: initial preview"; stop_child; exit 1 }
     timeout { puts stderr "PTY timeout: initial preview"; stop_child; exit 1 }
@@ -329,6 +403,85 @@ send_key "\033OP"
 await help-closed {PTY body ABC-1 version 1}
 set viewer_dir [lindex [glob -nocomplain -directory $state .viewer.*] 0]
 await_help_state 0 initial-help-closed
+# Keep a real query active while changing dimensions. A resize is only a
+# layout change: the selected issue, its cached preview body, and fzf's query
+# and scroll position must remain where the user left them.
+send_key "'ABC-1"
+await_selected_key ABC-1
+settle_output before-query-resize
+send_key "\033\[6~"
+await query-resize-preview-scrolled {Preview line 40}
+settle_output before-query-resize-scrolled
+set count_file [file join $counts ABC-1]
+set resize_fetch_count [string trim [slurp $count_file]]
+set resize_preview_starts [llength [split [string trim [slurp $env(PTY_PREVIEW_LOG)]] "\n"]]
+# Capture the actual fzf query through a test-only binding. A later keystroke
+# can happen to select the same issue even if resize discarded the query.
+set query_before_resize [capture_query query-before-resize]
+if {$query_before_resize ne "'ABC-1"} {
+  puts stderr "unexpected active query before resize: <$query_before_resize>"; stop_child; exit 1
+}
+# `send_key` cleared the PTY transcript before this PgDn, so this is a fresh
+# viewport anchor. Requiring it after narrowing detects a reset-to-top.
+set scroll_anchor {Preview line 40}
+if {[string first $scroll_anchor $observed_output] < 0} {
+  puts stderr "fresh pre-resize viewport did not contain $scroll_anchor"; stop_child; exit 1
+}
+set observed_output {}
+exec stty rows 30 columns 55 < $spawn_out(slave,name)
+await query-resize-rendered $scroll_anchor
+settle_output query-resize-rendered
+if {[string trim [slurp [file join $state sources source-source-terminal key]]] ne "ABC-1"} {
+  puts stderr "resize changed the selected issue"; stop_child; exit 1
+}
+if {[string trim [slurp $count_file]] ne $resize_fetch_count} {
+  puts stderr "resize fetched issue detail again"; stop_child; exit 1
+}
+if {[string first $scroll_anchor $observed_output] < 0} {
+  puts stderr "resize lost the current preview viewport anchor $scroll_anchor"; stop_child; exit 1
+}
+# The long, single-paragraph fixture remains pageable after the narrow resize.
+# Walk the real fzf preview until its unique tail marker becomes visible.
+send_key [string repeat "\033\[6~" 15]
+await narrow-preview-paragraph-tail {REFLOW-END}
+settle_output narrow-preview-paragraph-tail
+if {[string first REFLOW-END $observed_output] < 0} { puts stderr "narrow preview cannot reach paragraph tail"; stop_child; exit 1 }
+if {[string trim [slurp $count_file]] ne $resize_fetch_count} {
+  puts stderr "paging the narrow preview fetched issue detail again"; stop_child; exit 1
+}
+set narrow_preview_starts [llength [split [string trim [slurp $env(PTY_PREVIEW_LOG)]] "\n"]]
+if {$narrow_preview_starts != $resize_preview_starts} {
+  puts stderr "paging the narrow preview restarted its renderer"; stop_child; exit 1
+}
+# Check the query itself, then prove it still drives filtering after resize.
+set query_after_resize [capture_query query-after-resize]
+if {$query_after_resize ne $query_before_resize} {
+  puts stderr "resize changed the active query: <$query_before_resize> -> <$query_after_resize>"; stop_child; exit 1
+}
+set observed_output {}
+exec stty rows 40 columns 170 < $spawn_out(slave,name)
+await query-resize-wide-paragraph {REFLOW-END}
+settle_output query-resize-wide-paragraph
+if {[string first REFLOW-END $observed_output] < 0} { puts stderr "wide resize lost the paragraph tail"; stop_child; exit 1 }
+if {[string trim [slurp $count_file]] ne $resize_fetch_count} {
+  puts stderr "resize reflow fetched issue detail again"; stop_child; exit 1
+}
+set current_preview_starts [llength [split [string trim [slurp $env(PTY_PREVIEW_LOG)]] "\n"]]
+if {$current_preview_starts != $resize_preview_starts} {
+  puts stderr "resize restarted the preview renderer ($resize_preview_starts -> $current_preview_starts)"; stop_child; exit 1
+}
+send_key "0"
+await_selected_key ABC-10
+set query_after_extension [capture_query query-after-extension]
+if {$query_after_extension ne "'ABC-10"} {
+  puts stderr "typing after resize did not extend the query: <$query_after_extension>"; stop_child; exit 1
+}
+exec stty rows 40 columns 100 < $spawn_out(slave,name)
+settle_output query-resize-restored
+send_key "\025"
+settle_output query-resize-filter-cleared
+puts "ok - active query, selection, cached preview, and scroll survive resize"
+set sweep_fetch_count [string trim [slurp [file join $counts ABC-10]]]
 foreach dimensions {{20 170} {10 55} {5 20} {2 5} {1 1} {40 55} {40 20} {40 5} {40 1}} {
   lassign $dimensions rows cols
   set observed_output {}
@@ -337,10 +490,12 @@ foreach dimensions {{20 170} {10 55} {5 20} {2 5} {1 1} {40 55} {40 20} {40 5} {
   # Discard earlier paints: only output after growing proves recovery.
   set observed_output {}
   exec stty rows 40 columns 100 < $spawn_out(slave,name)
-  await "resize-restored-$rows-$cols" {PTY body ABC-1 version 1}
+  await "resize-restored-$rows-$cols" {PTY body ABC-10 version 1}
   settle_output "resize-restored-$rows-$cols"
 }
 # A dragged divider produces a burst of resizes while callbacks are running.
+set burst_preview_starts [llength [split [string trim [slurp $env(PTY_PREVIEW_LOG)]] "\n"]]
+set burst_layout_direction [expr {$picker_layout eq "bottom" ? "up" : "down"}]
 set observed_output {}
 exec sh -c {
   i=0
@@ -356,11 +511,24 @@ settle_output resize-burst
 # size before restoring; an already-100-column fzf need not repaint at 100.
 set observed_output {}
 exec stty rows 39 columns 90 < $spawn_out(slave,name)
-await resize-burst-distinct-size {PTY body ABC-1 version 1}
+set distinct_size [string trim [exec stty size < $spawn_out(slave,name)]]
+if {$distinct_size ne "39 90"} { puts stderr "PTY failed to set distinct burst dimensions: $distinct_size"; stop_child; exit 1 }
+await_layout "$burst_layout_direction,28,*" resize-burst-layout
+await resize-burst-distinct-size {PTY body ABC-10 version 1}
 settle_output resize-burst-distinct-size
 set observed_output {}
 exec stty rows 40 columns 100 < $spawn_out(slave,name)
-await resize-burst-restored {PTY body ABC-1 version 1}
+set restored_size [string trim [exec stty size < $spawn_out(slave,name)]]
+if {$restored_size ne "40 100"} { puts stderr "PTY failed to restore burst dimensions: $restored_size"; stop_child; exit 1 }
+await_layout "$burst_layout_direction,29,*" resize-burst-layout-restored
+await resize-burst-restored {PTY body ABC-10 version 1}
+set burst_preview_starts_after [llength [split [string trim [slurp $env(PTY_PREVIEW_LOG)]] "\n"]]
+if {$burst_preview_starts_after != $burst_preview_starts} {
+  puts stderr "visible divider burst restarted the preview renderer ($burst_preview_starts -> $burst_preview_starts_after)"; stop_child; exit 1
+}
+if {[string trim [slurp [file join $counts ABC-10]]] ne $sweep_fetch_count} {
+  puts stderr "resize sweep or burst fetched issue detail again"; stop_child; exit 1
+}
 puts "ok - narrow/short pane recovery and continuous divider resize"
 settle_output before-filter
 set navigation_started [clock milliseconds]
@@ -461,8 +629,19 @@ settle_output before-post-rescan-refresh
 set scan_log [slurp [file join $tmp herdr.log]]
 if {[regexp -all {pane read source-pane --source visible} $scan_log] != 1} { puts stderr "repeated Ctrl-G queued duplicate scans"; stop_child; exit 1 }
 puts "ok - rescan survives resize and ignores repeated requests while the source read is gated"
+set refresh_selected_before [string trim [slurp [file join $state sources source-source-terminal key]]]
+set refresh_layout_log_before [slurp [file join $tmp herdr.log]]
 send_key "\022"
 await refreshed-preview {PTY body ABC-11 version 2}
+settle_output refreshed-preview-settled
+if {$refresh_selected_before ne "ABC-11" || [string trim [slurp [file join $state sources source-source-terminal key]]] ne $refresh_selected_before} {
+  puts stderr "refresh changed the selected issue"; stop_child; exit 1
+}
+set refresh_layout_log_after [slurp [file join $tmp herdr.log]]
+if {$refresh_layout_log_after ne $refresh_layout_log_before} {
+  puts stderr "refresh issued a source pane operation"; stop_child; exit 1
+}
+puts "ok - explicit refresh updates the selected preview without switching issues or source panes"
 set viewer_dirs [glob -nocomplain -directory $state .viewer.*]
 if {$viewer_dirs ne ""} {
   set stderr_file [file join [lindex $viewer_dirs 0] fzf-stderr]

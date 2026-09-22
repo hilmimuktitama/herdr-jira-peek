@@ -14,7 +14,16 @@ printf '%s\n' "$*" >> "$MULTI_ROOT/log"
 case "$1 $2" in
   'pane get')
     awk -F '\t' -v pane="$3" '$1==pane {print $2}' "$MULTI_ROOT/panes" | jq -Rse 'rtrimstr("\n") | select(length>0) | {result:{pane:{terminal_id:.}}}' ;;
-  'pane read') printf '%s\n' "${MULTI_KEYS-ABC-1}" ;;
+  'pane read')
+    if [ -n "${MULTI_READ_DELAY:-}" ]; then sleep "$MULTI_READ_DELAY"; fi
+    printf '%s\n' "${MULTI_KEYS-ABC-1}" ;;
+  'notification show')
+    if [ "${MULTI_NOTIFICATION_GATE:-0}" = 1 ]; then
+      printf '%s\n' "$$" > "$MULTI_ROOT/notifier-pid"
+      : > "$MULTI_ROOT/notifier-started"
+      while [ ! -f "$MULTI_ROOT/notifier-release" ]; do sleep 0.05; done
+    fi
+    ;;
   'workspace list')
     [ "${MULTI_LIST_FAIL:-0}" = 0 ] || exit 1
     printf '%s\n' '{"result":{"workspaces":[{"workspace_id":"wa"},{"workspace_id":"wb"}]}}' ;;
@@ -65,6 +74,9 @@ peek() { HERDR_PANE_ID="$1" MULTI_KEYS="${2:-ABC-1}" sh "$ROOT/scripts/peek.sh" 
 live() { awk -F '\t' -v p="$1" '$1==p {found=1} END {exit !found}' "$tmp/panes"; }
 a="$tmp/state/sources/source-ta"; b="$tmp/state/sources/source-tb"; c="$tmp/state/sources/source-tc"
 peek a ABC-1
+if grep -q '^notification show Opening Jira Peek' "$tmp/log"; then fail 'fast opening showed an unnecessary toast'; fi
+[ "$(grep '^pane resize ' "$tmp/log")" = 'pane resize --pane v1 --direction right --amount 0' ] \
+  || fail 'startup redraw did not target only the new viewer'
 peek b ABC-2
 peek c ABC-3
 if ! { live v1 && live v2 && live v3; }; then fail 'opening B/C closed another viewer'; fi
@@ -155,4 +167,25 @@ live "$bv" || fail 'stale legacy cleanup touched B'
 # Unsafe identity cannot escape the source registry.
 printf 'bad\t../escape\twa\n' >> "$tmp/panes"
 if peek bad 2>/dev/null; then fail 'unsafe source identity accepted'; fi
+before_feedback=$(grep -c '^notification show Opening Jira Peek' "$tmp/log" || true)
+MULTI_READ_DELAY=0.45
+MULTI_NOTIFICATION_GATE=1
+export MULTI_READ_DELAY
+export MULTI_NOTIFICATION_GATE
+rm -f "$tmp/notifier-release" "$tmp/notifier-started" "$tmp/notifier-pid"
+feedback_started=$(date +%s)
+( sleep 3; : > "$tmp/notifier-release" ) &
+release_watchdog=$!
+peek a
+feedback_finished=$(date +%s)
+kill "$release_watchdog" 2>/dev/null || true
+wait "$release_watchdog" 2>/dev/null || true
+unset MULTI_READ_DELAY
+unset MULTI_NOTIFICATION_GATE
+after_feedback=$(grep -c '^notification show Opening Jira Peek' "$tmp/log" || true)
+[ "$after_feedback" -gt "$before_feedback" ] || fail 'slow scan did not show opening feedback'
+[ $((feedback_finished - feedback_started)) -lt 3 ] || fail 'scan waited for the blocked notification process'
+[ -f "$tmp/notifier-started" ] || fail 'slow scan did not start the gated notification'
+notifier_pid=$(cat "$tmp/notifier-pid")
+if kill -0 "$notifier_pid" 2>/dev/null; then fail 'cancelled notification process remained alive'; fi
 printf 'ok - independent source panes, callbacks, moves, concurrency, and upgrades\n'

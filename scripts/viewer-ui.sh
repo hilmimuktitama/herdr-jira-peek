@@ -90,23 +90,27 @@ if [ "$kind" = layout ]; then
   case "$count" in ''|*[!0-9]*) count=1;; esac
   nav=$count; [ "$rows" -ge 45 ] && [ "$nav" -gt 10 ] && nav=10; [ "$rows" -lt 45 ] && [ "$nav" -gt 8 ] && nav=8
   header_lines=0; [ "${VIEWER_HAS_FOOTER:-0}" = 0 ] && header_lines=1
-  [ -e "${VIEWER_STATE_DIR:-}/ui-help" ] && header_lines=5
+  [ -e "${VIEWER_STATE_DIR:-}/ui-help" ] && header_lines=7
   status_lines=0; [ -s "${VIEWER_STATE_DIR:-}/status" ] && status_lines=1
   footer_lines=0
   if [ "${VIEWER_HAS_FOOTER:-0}" = 1 ]; then
     footer_lines=1; [ -s "${VIEWER_STATE_DIR:-}/ui-message" ] && footer_lines=2
   fi
   budget=$((rows - nav - 1 - header_lines - status_lines - footer_lines - 1))
-  if [ "${VIEWER_PICKER_LAYOUT:-bottom}" = bottom ]; then
-    if [ "$budget" -ge 4 ]; then
-      printf 'up,%s,wrap,border-bottom,nohidden' "$budget"
+  # The preview's bounded 80-column logical lines need enough room to wrap
+  # completely; fzf scrolls by logical lines rather than within one line.
+  if [ "$cols" -lt 30 ]; then
+    printf 'hidden'
+  elif [ "${VIEWER_PICKER_LAYOUT:-bottom}" = bottom ]; then
+    if [ "$budget" -ge 6 ]; then
+      printf 'up,%s,%s,border-bottom,nohidden' "$budget" "${VIEWER_PREVIEW_WRAP:-wrap}"
     else
       printf 'hidden'
     fi
   elif [ "$cols" -ge 160 ] && [ "$rows" -ge 20 ]; then
-    printf 'right,62%%,wrap,border-left,nohidden'
-  elif [ "$budget" -ge 4 ]; then
-    printf 'down,%s,wrap,border-top,nohidden' "$budget"
+    printf 'right,62%%,%s,border-left,nohidden' "${VIEWER_PREVIEW_WRAP:-wrap}"
+  elif [ "$budget" -ge 6 ]; then
+    printf 'down,%s,%s,border-top,nohidden' "$budget" "${VIEWER_PREVIEW_WRAP:-wrap}"
   else
     printf 'hidden'
   fi
@@ -115,7 +119,10 @@ fi
 if [ "$kind" = resize ]; then
   footer=$(sh "$DIR/viewer-rows.sh" footer)
   relayout=$(sh "$DIR/viewer-ui.sh" relayout)
-  printf 'change-footer[%s]+%s+refresh-preview' "$footer" "$relayout"
+  # fzf reflows the existing preview buffer when the terminal changes size.
+  # Refreshing here would restart the renderer on every divider-drag event,
+  # discarding both in-flight work and the user's preview scroll position.
+  printf 'change-footer[%s]+%s' "$footer" "$relayout"
   exit 0
 fi
 if [ "$kind" = relayout ]; then

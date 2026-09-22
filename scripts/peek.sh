@@ -1,4 +1,5 @@
 #!/bin/sh
+# shellcheck disable=SC2329 # Feedback cleanup is invoked by signal traps.
 # shellcheck source=scripts/common.sh
 # Scan the focused pane's output for Jira keys, then review one in an adjacent pane.
 set -eu
@@ -15,12 +16,47 @@ pid=$(pane_id)
 [ -n "$pid" ] || die 'no pane in context'
 validate_pane_id "$pid" || die 'invalid pane in context'
 
-action_feedback 'Opening Jira Peek...' 'Scanning the source pane for issue keys.'
-
 candidate_tmp=$(mktemp "$HANDOFF_STATE_DIR/.candidates.XXXXXX") || die 'could not create candidate list'
-trap 'rm -f "$candidate_tmp"; lock_release' 0
-trap 'rm -f "$candidate_tmp"; lock_release; exit 1' 1 2 15
+feedback_pending=
+feedback_pid=
+stop_opening_feedback() {
+  [ -z "${feedback_pending:-}" ] || rm -f "$feedback_pending"
+  case "${feedback_pid:-}" in
+    ''|*[!0-9]*) ;;
+    *) kill "$feedback_pid" 2>/dev/null || true; wait "$feedback_pid" 2>/dev/null || true ;;
+  esac
+  feedback_pending=
+  feedback_pid=
+}
+peek_cleanup() {
+  stop_opening_feedback
+  rm -f "$candidate_tmp"
+  lock_release
+}
+trap peek_cleanup 0
+trap 'peek_cleanup; exit 1' 1 2 15
+feedback_pending=$(mktemp "$HANDOFF_STATE_DIR/.opening-feedback.XXXXXX") || die 'could not prepare opening feedback'
+# Keep the normal fast path visually quiet; only show progress when scanning
+# takes long enough for the toast to become useful.
+(
+  feedback_sleep=
+  feedback_stop() {
+    case "$feedback_sleep" in ''|*[!0-9]*) ;; *) kill "$feedback_sleep" 2>/dev/null || true; wait "$feedback_sleep" 2>/dev/null || true ;; esac
+    exit 0
+  }
+  trap feedback_stop 1 2 15
+  sleep 0.6 &
+  feedback_sleep=$!
+  wait "$feedback_sleep" || exit 0
+  feedback_sleep=
+  if [ -f "$feedback_pending" ]; then
+    rm -f "$feedback_pending"
+    exec "$HERDR" notification show 'Opening Jira Peek...' --body 'Scanning the source pane for issue keys.' --sound none >/dev/null 2>&1
+  fi
+) >/dev/null 2>&1 &
+feedback_pid=$!
 scan_candidates "$pid" "$candidate_tmp" || scan_status=$?
+stop_opening_feedback
 
 if [ "${scan_status:-0}" -eq 2 ]; then
   rm -f "$candidate_tmp"

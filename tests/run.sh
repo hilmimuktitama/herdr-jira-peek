@@ -980,6 +980,23 @@ else
   fail 'hard breaks and blank lines are preserved'
 fi
 
+# The live picker owns wrapping: its retained preview must have identical
+# logical lines at every width so resizing can reflow without a new process.
+native_narrow=$(run env FZF_PREVIEW_COLUMNS=20 NO_COLOR=1 sh "$ROOT/scripts/viewer-preview.sh" ABC-123) \
+  || fail 'native preview renders at narrow width'
+native_wide=$(run env FZF_PREVIEW_COLUMNS=160 NO_COLOR=1 sh "$ROOT/scripts/viewer-preview.sh" ABC-123) \
+  || fail 'native preview renders at wide width'
+[ "$native_narrow" = "$native_wide" ] || fail 'live preview embeds the initial terminal width'
+printf '%s\n' "$native_narrow" | awk '
+  $0 == "alpha beta gamma delta epsilon zeta eta theta iota kappa" { prose=1 }
+  $0 == "hard break survives" { hard_break=1 }
+  $0 == "- first list item" { list=1 }
+  $0 == "> quoted text" { quote=1 }
+  $0 == "    code one" { code=1 }
+  END { exit !(prose && hard_break && list && quote && code) }
+' || fail 'native preview preserves logical prose and ADF structure'
+pass 'live preview reflows without width-dependent rendering'
+
 printf '%s\n' '{"key":"ABC-123","summary":"Unicode","description":{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"\u6f22\u6f22\u6f22\u6f22\u6f22\u6f22\u6f22\u6f22\u6f22\u6f22\u6f22\u6f22\u6f22\u6f22\u6f22\u6f22"}]}]}}' \
   > "$STATE/cache/ABC-123.json"
 unicode_token=$(printf '%s\n' '"\u6f22\u6f22\u6f22\u6f22\u6f22\u6f22\u6f22\u6f22\u6f22\u6f22\u6f22\u6f22\u6f22\u6f22\u6f22\u6f22"' | jq -r .)
@@ -994,6 +1011,18 @@ if printf '%s\n' "$unicode_plain" | awk -v token="$unicode_token" \
 else
   fail 'overlong Unicode tokens were split'
 fi
+
+# fzf scrolls logical lines, so even one unbroken Unicode paragraph must be
+# split into reachable preview segments without dropping or damaging bytes.
+unicode_long="$unicode_token$unicode_token$unicode_token$unicode_token"
+jq -n --arg body "$unicode_long" '{key:"ABC-123",summary:"Unicode",description:$body}' > "$STATE/cache/ABC-123.json"
+native_unicode=$(run env FZF_PREVIEW_COLUMNS=35 NO_COLOR=1 sh "$ROOT/scripts/viewer-preview.sh" ABC-123) \
+  || fail 'bounded Unicode preview renders'
+unicode_joined=$(printf '%s\n' "$native_unicode" | sed -n '/^漢/p' | tr -d '\n')
+[ "$unicode_joined" = "$unicode_long" ] || fail 'preview splitting damaged Unicode content'
+printf '%s\n' "$native_unicode" | LC_ALL=C awk 'length($0) > 80 { exit 1 }' \
+  || fail 'Unicode preview includes an unscrollable long line'
+pass 'long Unicode preview remains pageable with every character intact'
 
 printf '%s\n' '{"key":"ABC-123","summary":"Unicode prefix","description":{"type":"doc","content":[{"type":"blockquote","content":[{"type":"paragraph","content":[{"type":"text","text":"\u00e9\u00e9\u00e9\u6f22"}]}]}]}}' \
   > "$STATE/cache/ABC-123.json"
@@ -1154,11 +1183,12 @@ feedback_ui() { env VIEWER_STATE_DIR="$FEEDBACK_STATE" VIEWER_HAS_FOOTER=1 VIEWE
 feedback_layout=$(feedback_ui layout)
 feedback_resize=$(feedback_ui resize)
 case "$feedback_resize" in
-  *"change-preview-window($feedback_layout)+refresh-preview") : ;;
+  *"change-preview-window($feedback_layout)") : ;;
   *) fail 'resize emits a complete preview layout' ;;
 esac
 case "$feedback_resize" in
   *'transform('*|*'execute('*|*'transform-footer('*) fail 'resize result blocks on another shell callback' ;;
+  *refresh-preview*|*reload*) fail 'resize restarts issue rendering' ;;
 esac
 [ "$(feedback_ui relayout)" = "change-preview-window($feedback_layout)" ] \
   && pass 'relayout reapplies a layout even if an earlier background result was canceled' \
@@ -1809,12 +1839,12 @@ pass 'noninteractive peek opens adjacent split' ;;
   *) fail 'noninteractive peek opens adjacent split' ;;
 esac
 opened_viewer=$(sed -n '1p' "$STATE/sources/source-terminal-source/viewer-pane")
-[ "$(sed -n '$p' "$HERDR_LOG")" = "pane resize --pane $opened_viewer --direction right --amount 0" ] \
-  || fail 'startup geometry synchronization targets the new viewer with zero movement'
-pass 'startup geometry synchronization targets the new viewer and tolerates an unsupported request'
-awk '/notification show Opening Jira Peek.*--sound none/ { feedback=1 } /pane read/ { read_seen=1; if (!feedback) late=1 } END { exit !(feedback && read_seen && !late) }' "$HERDR_LOG" \
-  || fail 'opening feedback precedes source scan'
-pass 'opening feedback precedes source scan even when notifications are unavailable'
+[ "$(grep '^pane resize ' "$HERDR_LOG")" = "pane resize --pane $opened_viewer --direction right --amount 0" ] \
+  || fail 'startup redraw targets only the new viewer with zero movement'
+if grep -q '^notification show Opening Jira Peek' "$HERDR_LOG"; then fail 'fast opening flashes a notification'; fi
+awk '/pane read/ { read_seen=1 } /plugin pane open/ { opened++; if (!read_seen) early=1 } END { exit !(read_seen && opened == 1 && !early) }' "$HERDR_LOG" \
+  || fail 'opening scans before one split operation'
+pass 'fast opening scans quietly and preserves the viewer startup redraw workaround'
 
 # Source priority, cross-source deduplication, and detection-only fallback.
 SOURCE_CONFIG="$TMP/source-config"; SOURCE_STATE="$TMP/source-state"

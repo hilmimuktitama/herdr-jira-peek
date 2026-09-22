@@ -75,6 +75,10 @@ canonical_url=$(issue_url "$key") || die 'could not determine the issue URL'
 # keeps the splitter safe even when a very narrow value is supplied by fzf.
 wrap_width=$((columns - 2))
 [ "$wrap_width" -gt 0 ] || wrap_width=1
+# fzf retains these lines and reflows them while resizing. Use a stable reading
+# width rather than the opening pane width. Bound each logical line because
+# fzf scrolls whole lines: an unbounded wrapped paragraph can hide its tail.
+[ "$viewer_preview" -eq 0 ] || wrap_width=80
 
 fields_csv=${READER_FIELDS-status,assignee,updated,link,description,comments}
 [ "$preview" = true ] && fields_csv=${PREVIEW_FIELDS-status,assignee,updated,description,comments}
@@ -91,7 +95,7 @@ if ! rendered=$(jq -L "$SCRIPT_DIR" -r \
   die 'could not render issue content'
 fi
 connection_assert_current || die 'Connection changed; close and reopen Peek.'
-printf '%s\n' "$rendered" | LC_ALL=C awk -v width="$wrap_width" \
+printf '%s\n' "$rendered" | LC_ALL=C awk -v width="$wrap_width" -v bounded_preview="$viewer_preview" \
      -v style="$PEEK_STYLE" -v labels="$field_labels" -v bold="$PEEK_BOLD" -v reset="$PEEK_RESET" \
      -f "$SCRIPT_DIR/text-format.awk"
 

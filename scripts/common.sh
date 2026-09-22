@@ -1123,10 +1123,10 @@ show() {
     die 'Connection changed while opening Peek; reopen with the current connection.'
   fi
   save_viewer_tracking "$opened_pane" "$opened_terminal"
-  # Herdr 0.9.0 can leave plugin panes at their estimated PTY size until the
-  # next input event, clipping the bottom rows. A zero-distance resize applies
-  # the client geometry without changing split ratios or sending picker input.
-  # Keep an already-open viewer usable if this compatibility request fails.
+  # Preserve the post-open redraw workaround for initial clipping on Herdr
+  # 0.9.0. Herdr schedules a full frame even with a zero delta; the split ratio
+  # stays unchanged. Keep this compatibility request out of preview refreshes
+  # and divider-resize callbacks, and tolerate hosts that do not support it.
   "$HERDR" pane resize --pane "$opened_pane" --direction right --amount 0 >/dev/null 2>&1 || true
 }
 
