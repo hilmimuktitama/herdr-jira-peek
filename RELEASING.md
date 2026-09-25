@@ -5,7 +5,7 @@ Plugin ID: `jira-peek`.
 
 The repository became public on 2026-09-07. Version `0.2.0` was published on
 2026-09-08 as the first versioned release; `0.1.0` was the development baseline.
-The latest release is `0.4.1`, published on 2026-09-23. This project has no
+The latest release is `0.4.2`, published on 2026-09-25. This project has no
 publish automation.
 
 ## Before making the repository public
@@ -44,6 +44,31 @@ publish automation.
   links are not an independent verification of each agreement.
 - [ ] Confirm the reporting inbox receives private security and conduct reports;
   delivery has not been independently tested.
+
+## Version 0.4.2 release validation — 2026-09-25
+
+- [x] Independently review the agent-pane scan path, Herdr compatibility, and
+  regression coverage. Strengthen visible-source assertions and qualify the
+  documentation to panes Herdr recognizes as agents.
+- [x] Pass the full local offline runtime suite, including real fzf/less/Expect
+  terminal tests, plus shell syntax, manifest validation, ShellCheck 0.11.0,
+  and `git diff --check`. No live Jira account was accessed.
+- [x] Review the public diff and scan the prospective tree, staged changes,
+  and release commit with Gitleaks 8.30.1; no leaks found. No screenshots or
+  runtime data files were added.
+- [x] Verify Linux and macOS CI on release commit
+  `4bf4b69f56ff1c0a40cc3198f7b187d3f3de08cf` in
+  [run 36095382206](https://github.com/hilmimuktitama/herdr-jira-peek/actions/runs/36095382206).
+  Linux passed first try. The first macOS attempt failed after the affected
+  scan tests passed, while initializing an unrelated cached-URL check; its
+  rerun passed the full suite and ShellCheck on the same commit.
+- [x] Publish [v0.4.2](https://github.com/hilmimuktitama/herdr-jira-peek/releases/tag/v0.4.2)
+  from that commit and pin README installation to its full SHA with `--ref`.
+  The subsequent documentation commit records publication; it changes no runtime code.
+
+The passive scan prevents recent-history reads from moving Herdr-recognized
+agent panes. Older keys may need to be brought into view before rescanning.
+Herdr may still repaint the source terminal while creating the viewer split.
 
 ## Version 0.4.1 release validation — 2026-09-23
 
