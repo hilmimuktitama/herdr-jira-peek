@@ -853,19 +853,34 @@ scan_candidates() (
   scan_cleanup() { rm -rf "$scan_dir"; }
   trap scan_cleanup 0
   trap 'scan_cleanup; trap - 0; exit 2' 1 2 15
-  scan_visible="$scan_dir/visible"; scan_recent="$scan_dir/recent"; scan_tmp="$scan_dir/candidates"
+  scan_visible="$scan_dir/visible"; scan_context="$scan_dir/context"; scan_tmp="$scan_dir/candidates"
+  # A text recent-history read can mouse-scroll an idle full-screen agent and
+  # then restore its viewport. Pane metadata lets us keep ordinary terminal
+  # scrollback while using only passive snapshots for recognized agents.
+  scan_info="$scan_dir/pane-info"
+  "$HERDR" pane get "$scan_pane" >"$scan_info" 2>/dev/null || exit 2
+  scan_context_source=$(jq -er '
+    .result.pane |
+    if type != "object" then error("missing pane")
+    elif (.agent | type == "string" and length > 0) then "detection"
+    else "recent-unwrapped" end
+  ' "$scan_info" 2>/dev/null) || exit 2
   scan_status=0; scan_source "$scan_pane" visible >"$scan_visible" || scan_status=$?
   [ "$scan_status" -lt 2 ] || exit 2
-  recent_status=0; scan_source "$scan_pane" recent-unwrapped >"$scan_recent" || recent_status=$?
-  [ "$recent_status" -lt 2 ] || exit 2
-  if [ -s "$scan_visible" ] || [ -s "$scan_recent" ]; then
-    { cat "$scan_visible"; cat "$scan_recent"; } \
+  context_status=0; scan_source "$scan_pane" "$scan_context_source" >"$scan_context" || context_status=$?
+  [ "$context_status" -lt 2 ] || exit 2
+  if [ -s "$scan_visible" ] || [ -s "$scan_context" ]; then
+    { cat "$scan_visible"; cat "$scan_context"; } \
       | awk '!seen[$0]++' >"$scan_tmp"
   else
-    detection_file="$scan_dir/detection"
-    detection_status=0; scan_source "$scan_pane" detection >"$detection_file" || detection_status=$?
-    [ "$detection_status" -lt 2 ] || exit 2
-    awk '!seen[$0]++' "$detection_file" >"$scan_tmp"
+    # Shell scrollback may be empty while Herdr's detection buffer still has
+    # useful text. Agent panes already scanned that same passive buffer.
+    if [ "$scan_context_source" != detection ]; then
+      detection_file="$scan_dir/detection"
+      detection_status=0; scan_source "$scan_pane" detection >"$detection_file" || detection_status=$?
+      [ "$detection_status" -lt 2 ] || exit 2
+      awk '!seen[$0]++' "$detection_file" >"$scan_tmp"
+    fi
   fi
   if [ -s "$scan_tmp" ]; then cp "$scan_tmp" "$scan_out"; exit 0; else exit 1; fi
 )

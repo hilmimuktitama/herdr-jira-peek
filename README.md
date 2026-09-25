@@ -66,6 +66,10 @@ Each source terminal keeps its own viewer. Invoke Peek again from the same
 source to close its viewer. **Ctrl-G** picks up new keys from that source;
 **Ctrl-R** fetches fresh data for the selected issue.
 
+When Herdr recognizes a full-screen agent, Peek scans passive snapshots so it
+does not scroll the agent's transcript. Bring an older key into view before
+pressing Ctrl-G if it does not appear in the issue list.
+
 The preview adapts to the pane size and hides when space is too limited.
 Choose a top-aligned layout or different fields in [configuration](#configure).
 

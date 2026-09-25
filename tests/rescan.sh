@@ -19,7 +19,13 @@ cat > "$tmp/bin/herdr" <<'EOF'
 printf '%s\n' "$*" >> "$HERDR_LOG"
 if [ "$1 $2" = "pane get" ]; then
   [ "${HERDR_GET_MODE:-ok}" = dead ] && exit 1
-  [ "${HERDR_GET_MODE:-ok}" = moved ] && printf '%s\n' '{"result":{"pane":{"terminal_id":"other-terminal"}}}' || printf '%s\n' '{"result":{"pane":{"pane_id":"source-pane","terminal_id":"source-terminal"}}}'
+  if [ "${HERDR_GET_MODE:-ok}" = moved ] && [ "$3" = source-pane ]; then
+    printf '%s\n' '{"result":{"pane":{"terminal_id":"other-terminal"}}}'
+  elif [ "${HERDR_AGENT:-}" = claude ]; then
+    printf '%s\n' '{"result":{"pane":{"pane_id":"source-pane","terminal_id":"source-terminal","agent":"claude"}}}'
+  else
+    printf '%s\n' '{"result":{"pane":{"pane_id":"source-pane","terminal_id":"source-terminal"}}}'
+  fi
   exit 0
 fi
 if [ "$1 $2" = "workspace list" ]; then printf '%s\n' '{"result":{"workspaces":[{"workspace_id":"workspace-a"}]}}'; exit 0; fi
@@ -52,6 +58,14 @@ printf '%s\n' 'ok - visible-first newest ordering'
 HERDR_VISIBLE_TEXT=ABC-1 HERDR_RECENT_TEXT='DEF-2 ABC-4 ABC-1' HERDR_DETECTION_TEXT='ABC-9 ABC-4' sh "$ROOT/scripts/viewer-rescan.sh"
 [ "$(cat "$tmp/state/candidates")" = "$(printf '%s\n' ABC-1 ABC-4 DEF-2)" ] || exit 1
 printf '%s\n' 'ok - recent-unwrapped fills after visible with dedup'
+
+: > "$tmp/herdr.log"
+HERDR_AGENT=claude HERDR_VISIBLE_TEXT=ABC-1 HERDR_RECENT_TEXT='DEF-2' HERDR_DETECTION_TEXT=ABC-9 sh "$ROOT/scripts/viewer-rescan.sh"
+[ "$(cat "$tmp/state/candidates")" = "$(printf '%s\n' ABC-1 ABC-9)" ] || exit 1
+grep -Fq 'pane read source-pane --source visible' "$tmp/herdr.log" || exit 1
+grep -Fq 'pane read source-pane --source detection' "$tmp/herdr.log" || exit 1
+if grep -Fq 'pane read source-pane --source recent-unwrapped' "$tmp/herdr.log"; then exit 1; fi
+printf '%s\n' 'ok - agent rescan uses passive visible and detection snapshots'
 
 HERDR_VISIBLE_TEXT= HERDR_RECENT_TEXT= HERDR_DETECTION_TEXT='ABC-9 ABC-9 DEF-8 ABC-1' sh "$ROOT/scripts/viewer-rescan.sh"
 [ "$(cat "$tmp/state/candidates")" = "$(printf '%s\n' ABC-1 DEF-8 ABC-9)" ] || exit 1

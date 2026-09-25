@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.2 — 2026-09-25
+
+- Scan recognized agent panes through passive visible and detection snapshots.
+  Herdr can scroll an idle full-screen agent while fulfilling a recent-history
+  read, so initial opening and Ctrl-G no longer request that read from agents.
+  Ordinary terminal panes still include recent unwrapped scrollback.
+
 ## 0.4.1 — 2026-09-23
 
 - Reflow the retained preview during pane resizing, preserving the filter,

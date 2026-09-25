@@ -13,7 +13,8 @@ set -eu
 printf '%s\n' "$*" >> "$MULTI_ROOT/log"
 case "$1 $2" in
   'pane get')
-    awk -F '\t' -v pane="$3" '$1==pane {print $2}' "$MULTI_ROOT/panes" | jq -Rse 'rtrimstr("\n") | select(length>0) | {result:{pane:{terminal_id:.}}}' ;;
+    awk -F '\t' -v pane="$3" '$1==pane {print $2}' "$MULTI_ROOT/panes" \
+      | jq -Rse --arg agent "${MULTI_AGENT:-}" 'rtrimstr("\n") | select(length>0) | {result:{pane:({terminal_id:.} + (if $agent == "" then {} else {agent:$agent} end))}}' ;;
   'pane read')
     if [ -n "${MULTI_READ_DELAY:-}" ]; then sleep "$MULTI_READ_DELAY"; fi
     printf '%s\n' "${MULTI_KEYS-ABC-1}" ;;
@@ -73,7 +74,11 @@ fail() { printf 'not ok - multipane: %s\n' "$*" >&2; exit 1; }
 peek() { HERDR_PANE_ID="$1" MULTI_KEYS="${2:-ABC-1}" sh "$ROOT/scripts/peek.sh" >/dev/null; }
 live() { awk -F '\t' -v p="$1" '$1==p {found=1} END {exit !found}' "$tmp/panes"; }
 a="$tmp/state/sources/source-ta"; b="$tmp/state/sources/source-tb"; c="$tmp/state/sources/source-tc"
+export MULTI_AGENT=claude
 peek a ABC-1
+unset MULTI_AGENT
+grep -Fq 'pane read a --source detection' "$tmp/log" || fail 'agent opening skipped passive detection read'
+if grep -Fq 'pane read a --source recent-unwrapped' "$tmp/log"; then fail 'agent opening scrolled source history'; fi
 if grep -q '^notification show Opening Jira Peek' "$tmp/log"; then fail 'fast opening showed an unnecessary toast'; fi
 [ "$(grep '^pane resize ' "$tmp/log")" = 'pane resize --pane v1 --direction right --amount 0' ] \
   || fail 'startup redraw did not target only the new viewer'
