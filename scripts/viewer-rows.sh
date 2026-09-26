@@ -10,6 +10,29 @@ status_line() {
   case "$status_value" in *[![:print:]]*) status_value=;; esac
   if printf '%s\n' "$status_value" | grep -Eq '^Rescanning source pane\.\.\.$|^Rescanned: [0-9]+ issues$|^(No Jira keys found|Source terminal unavailable|Could not read source terminal); keeping previous [0-9]+$'; then printf '%s\n' "$status_value"; fi
 }
+source_status_line() {
+  [ -f "$state/highlight-status" ] && [ ! -L "$state/highlight-status" ] || return 0
+  source_value=$(sed -n '1p' "$state/highlight-status" 2>/dev/null || true)
+  case "$source_value" in
+    'Source: native highlight requires Herdr update'|\
+    'Source: not visible'|'Source: highlight unavailable'|'Source: hidden'|\
+    'Source: source unavailable'|'Source: graphics unavailable'|'Source: layout unavailable'|\
+    'Source: read unavailable'|'Source: position uncertain'|'Source: row alignment uncertain'|\
+    'Source: text width uncertain'|'Source: control text'|'Source: row width uncertain') printf '%s\n' "$source_value"; return 0 ;;
+    'Source: '* )
+      source_count=${source_value#Source: }
+      case "$source_count" in
+        *' visible match') source_count=${source_count% visible match}; source_noun=match ;;
+        *' visible matches') source_count=${source_count% visible matches}; source_noun=matches ;;
+        *) return 0 ;;
+      esac
+      case "$source_count" in ''|*[!0-9]*) return 0 ;; esac
+      [ "${#source_count}" -le 2 ] || return 0
+      if [ "$source_count" = 1 ]; then source_noun=match; else source_noun=matches; fi
+      printf 'Source: %s visible %s\n' "$source_count" "$source_noun"
+      ;;
+  esac
+}
 if [ "${1:-}" = rescan-start ]; then
   status_tmp=$(mktemp "$state/.status.XXXXXX") || exit 1
   printf '%s\n' 'Rescanning source pane...' > "$status_tmp"
@@ -27,6 +50,7 @@ if [ "${1:-}" = header ]; then
     fi
   fi
   status_line
+  [ "${VIEWER_HAS_FOOTER:-0}" = 1 ] || source_status_line
   exit 0
 fi
 if [ "${1:-}" = prompt ]; then
@@ -37,6 +61,7 @@ if [ "${1:-}" = footer ]; then
   cols=${FZF_COLUMNS:-${COLUMNS:-80}}
   case "$cols" in ''|*[!0-9]*) cols=80;; esac
   [ -s "$state/ui-message" ] && sed -n '1p' "$state/ui-message"
+  source_status_line
   if [ "$cols" -lt 24 ]; then printf 'Ctrl-U Clear';
   elif [ "$cols" -lt 34 ]; then printf 'Ctrl-U Clear \302\267 Esc Close';
   elif [ "$cols" -lt 63 ]; then printf 'Ctrl-U Clear \302\267 F1 Help \302\267 Esc Close';
@@ -50,6 +75,10 @@ if [ "${1:-}" = help ]; then
 fi
 if [ "${1:-}" = status ]; then
   status_line
+  exit 0
+fi
+if [ "${1:-}" = source-status ]; then
+  source_status_line
   exit 0
 fi
 # Chrome reads only viewer-owned UI state. Initialize the full runtime only

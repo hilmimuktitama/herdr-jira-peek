@@ -45,6 +45,7 @@ CACHE_TTL_MIN=10
 MAX_CANDIDATES=20
 PICKER_LAYOUT=bottom
 KEY_RE=
+SOURCE_HIGHLIGHT=off
 # Config is authoritative; inherited display preferences must not override it.
 unset PICKER_FIELDS PREVIEW_FIELDS READER_FIELDS FIELD_LABELS TEXT_STYLE
 preferences_defaults
@@ -116,6 +117,10 @@ load_config() {
       PICKER_LAYOUT=*)
         decode_config_value "${config_line#PICKER_LAYOUT=}" || die 'invalid PICKER_LAYOUT assignment in config.sh'
         PICKER_LAYOUT=$config_value
+        ;;
+      SOURCE_HIGHLIGHT=*)
+        decode_config_value "${config_line#SOURCE_HIGHLIGHT=}" || die 'invalid SOURCE_HIGHLIGHT assignment in config.sh'
+        SOURCE_HIGHLIGHT=$config_value
         ;;
       KEY_RE=*)
         decode_config_value "${config_line#KEY_RE=}" || die 'invalid KEY_RE assignment in config.sh'
@@ -203,6 +208,10 @@ esac
 case "$PICKER_LAYOUT" in
   top|bottom) ;;
   *) die 'PICKER_LAYOUT must be top or bottom' ;;
+esac
+case "$SOURCE_HIGHLIGHT" in
+  off|auto) ;;
+  *) die 'SOURCE_HIGHLIGHT must be off or auto' ;;
 esac
 preferences_validate_all || die "$PREFERENCES_ERROR"
 # shellcheck source=scripts/field-plan.sh

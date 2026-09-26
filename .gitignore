@@ -23,3 +23,8 @@ config.sh
 cache/
 herdr-plugin-state/
 *.log
+__pycache__/
+*.py[cod]
+
+# Local native Herdr build (never publish binaries or runtime state)
+.local/

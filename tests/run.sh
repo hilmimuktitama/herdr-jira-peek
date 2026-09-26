@@ -72,6 +72,10 @@ case "$doctor_output" in
   *) fail 'doctor default picker layout' ;;
 esac
 case "$doctor_output" in
+  *'OK   SOURCE_HIGHLIGHT is valid (off)'*) pass 'doctor defaults source highlighting to off' ;;
+  *) fail 'doctor default source highlighting' ;;
+esac
+case "$doctor_output" in
   *jira-example*|*jira.example.test*|*TWG\ response*|*\{*) fail 'doctor does not leak config or response data' ;;
 esac
 
@@ -1281,6 +1285,36 @@ for invalid_layout in '' newest BOTTOM; do
   case "$layout_doctor" in *'FAIL PICKER_LAYOUT must be top or bottom'*) : ;; *) fail 'doctor rejects invalid picker layout';; esac
 done
 pass 'runtime and doctor reject empty and unknown picker layouts'
+for source_highlight in off auto; do
+  cp "$CONFIG/config.sh" "$LAYOUT_CONFIG/config.sh"
+  printf "SOURCE_HIGHLIGHT='%s'\n" "$source_highlight" >> "$LAYOUT_CONFIG/config.sh"
+  if ! run_with_state "$LAYOUT_CONFIG" "$STATE" env COLUMNS=99 LINES=40 \
+    sh "$ROOT/scripts/viewer.sh" >/dev/null; then
+    fail "$source_highlight source highlight config accepted by runtime"
+  fi
+  highlight_doctor=$(run_with_state "$LAYOUT_CONFIG" "$STATE" sh "$ROOT/scripts/doctor.sh" 2>&1 || true)
+  case "$highlight_doctor" in
+    *"OK   SOURCE_HIGHLIGHT is valid ($source_highlight)"*) : ;;
+    *) fail "$source_highlight source highlight doctor validation" ;;
+  esac
+done
+for invalid_source_highlight in '' always AUTO; do
+  cp "$CONFIG/config.sh" "$LAYOUT_CONFIG/config.sh"
+  printf "SOURCE_HIGHLIGHT='%s'\n" "$invalid_source_highlight" >> "$LAYOUT_CONFIG/config.sh"
+  if highlight_error=$(run_with_state "$LAYOUT_CONFIG" "$STATE" sh "$ROOT/scripts/viewer.sh" 2>&1); then
+    fail 'invalid source highlight config accepted'
+  fi
+  case "$highlight_error" in
+    *'SOURCE_HIGHLIGHT must be off or auto'*) : ;;
+    *) fail 'source highlight runtime diagnostic' ;;
+  esac
+  highlight_doctor=$(run_with_state "$LAYOUT_CONFIG" "$STATE" sh "$ROOT/scripts/doctor.sh" 2>&1 || true)
+  case "$highlight_doctor" in
+    *'FAIL SOURCE_HIGHLIGHT must be off or auto'*) : ;;
+    *) fail 'doctor rejects invalid source highlight config' ;;
+  esac
+done
+pass 'runtime and doctor validate source highlight opt-in'
 for layout_preference in top bottom; do
   small_layout=$(env VIEWER_PICKER_LAYOUT="$layout_preference" VIEWER_HAS_FOOTER=1 FZF_COLUMNS=30 FZF_LINES=10 \
     sh "$ROOT/scripts/viewer-ui.sh" layout 11)

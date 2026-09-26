@@ -38,6 +38,16 @@ if [ "$kind" = focus ]; then
       fi
     fi
   fi
+  if [ "${VIEWER_SOURCE_HIGHLIGHT_ENABLED:-0}" = 1 ]; then
+    # Keep the fzf callback local and cheap. The highlight worker owns all
+    # native decoration lease; an empty line means clear it.
+    request_file=$VIEWER_STATE_DIR/highlight-request
+    umask 077
+    request_tmp=$(mktemp "$VIEWER_STATE_DIR/.highlight-request.XXXXXX") || exit 1
+    if ! { printf '%s\n' "$key" > "$request_tmp" && mv "$request_tmp" "$request_file"; }; then
+      rm -f "$request_tmp"; exit 1
+    fi
+  fi
   kind=dismiss-message
 fi
 message_expired() {
@@ -45,10 +55,39 @@ message_expired() {
   case "$expiry" in ''|*[!0-9]*) return 1;; esac
   [ "$(date +%s)" -ge "$expiry" ]
 }
+source_status() {
+  # Only render worker status phrases from a small allowlist. Never let an
+  # issue key, terminal text, or other worker output enter fzf's UI strings.
+  [ -f "${VIEWER_STATE_DIR:-}/highlight-status" ] && [ ! -L "${VIEWER_STATE_DIR:-}/highlight-status" ] || return 0
+  value=$(sed -n '1p' "$VIEWER_STATE_DIR/highlight-status" 2>/dev/null || true)
+  case "$value" in
+    'Source: native highlight requires Herdr update'|\
+    'Source: not visible'|'Source: highlight unavailable'|'Source: hidden'|\
+    'Source: source unavailable'|'Source: graphics unavailable'|'Source: layout unavailable'|\
+    'Source: read unavailable'|'Source: position uncertain'|'Source: row alignment uncertain'|\
+    'Source: text width uncertain'|'Source: control text'|'Source: row width uncertain') printf '%s' "$value"; return ;;
+    'Source: '* )
+      count=${value#Source: }
+      case "$count" in
+        *' visible match') number=${count% visible match} ;;
+        *' visible matches') number=${count% visible matches} ;;
+        *) return ;;
+      esac
+      case "$number" in ''|*[!0-9]*) return ;; esac
+      [ "${#number}" -le 2 ] || return
+      if [ "$number" = 1 ]; then noun=match; else noun=matches; fi
+      printf 'Source: %s visible %s' "$number" "$noun"
+      ;;
+  esac
+}
 if [ "$kind" = watch-messages ]; then
   # Independent of Jira fetches and fzf background rescans. Only the fzf
   # event loop clears feedback, so a queued expiry cannot erase a newer one.
   cd "$VIEWER_STATE_DIR"
+  # Force an initial sync once fzf is listening, then acknowledge only
+  # successful posts so startup and transient failures cannot lose updates.
+  previous_source_status=$(source_status)
+  [ "${VIEWER_SOURCE_HIGHLIGHT_ENABLED:-0}" = 1 ] && previous_source_status=unpublished
   while [ -d "$VIEWER_STATE_DIR" ]; do
     if [ -n "${VIEWER_CONNECTION_ID:-}" ] && ! connection_local_current; then
       "${CURL_BIN_PATH:-curl}" -sS --max-time 1 --unix-socket "$VIEWER_FZF_SOCKET" -X POST http://localhost -d 'abort' >/dev/null 2>&1 || true
@@ -58,8 +97,27 @@ if [ "$kind" = watch-messages ]; then
       "${CURL_BIN_PATH:-curl}" -sS --max-time 1 --unix-socket "$VIEWER_FZF_SOCKET" -X POST http://localhost \
         -d 'transform(sh "$DIR/viewer-ui.sh" expire-message)' >/dev/null 2>&1 || true
     fi
+    current_source_status=$(source_status)
+    if [ "$current_source_status" != "$previous_source_status" ]; then
+      if [ -S "$VIEWER_FZF_SOCKET" ]; then
+        if "${CURL_BIN_PATH:-curl}" -fsS --max-time 1 --unix-socket "$VIEWER_FZF_SOCKET" -X POST http://localhost \
+          -d 'transform(sh "$DIR/viewer-ui.sh" refresh-source-status)' >/dev/null 2>&1; then
+          previous_source_status=$current_source_status
+        fi
+      fi
+    fi
     sleep 0.25
   done
+  exit 0
+fi
+if [ "$kind" = refresh-source-status ]; then
+  if [ "${VIEWER_MODERN_FOOTER:-0}" = 1 ]; then
+    printf 'change-footer[%s]' "$(sh "$DIR/viewer-rows.sh" footer)"
+  else
+    printf 'change-header[%s]' "$(sh "$DIR/viewer-rows.sh" header)"
+  fi
+  relayout=$(sh "$DIR/viewer-ui.sh" relayout)
+  [ -z "$relayout" ] || printf '+%s' "$relayout"
   exit 0
 fi
 if [ "$kind" = expire-message ] || [ "$kind" = dismiss-message ]; then
@@ -92,9 +150,16 @@ if [ "$kind" = layout ]; then
   header_lines=0; [ "${VIEWER_HAS_FOOTER:-0}" = 0 ] && header_lines=1
   [ -e "${VIEWER_STATE_DIR:-}/ui-help" ] && header_lines=7
   status_lines=0; [ -s "${VIEWER_STATE_DIR:-}/status" ] && status_lines=1
+  source_lines=0
+  [ "${VIEWER_SOURCE_HIGHLIGHT_ENABLED:-0}" = 1 ] \
+    && [ -n "$(source_status)" ] && source_lines=1
   footer_lines=0
   if [ "${VIEWER_HAS_FOOTER:-0}" = 1 ]; then
-    footer_lines=1; [ -s "${VIEWER_STATE_DIR:-}/ui-message" ] && footer_lines=2
+    footer_lines=1
+    [ -s "${VIEWER_STATE_DIR:-}/ui-message" ] && footer_lines=$((footer_lines + 1))
+    footer_lines=$((footer_lines + source_lines))
+  elif [ "$source_lines" -gt 0 ]; then
+    status_lines=$((status_lines + source_lines))
   fi
   budget=$((rows - nav - 1 - header_lines - status_lines - footer_lines - 1))
   # The preview's bounded 80-column logical lines need enough room to wrap

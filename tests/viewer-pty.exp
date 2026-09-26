@@ -472,6 +472,9 @@ if {$current_preview_starts != $resize_preview_starts} {
 }
 send_key "0"
 await_selected_key ABC-10
+# Selection is persisted before the asynchronous preview has fetched/rendered.
+# Wait for the actual detail before resizing or inspecting its fetch counter.
+await query-extension-preview {PTY body ABC-10 version 1}
 set query_after_extension [capture_query query-after-extension]
 if {$query_after_extension ne "'ABC-10"} {
   puts stderr "typing after resize did not extend the query: <$query_after_extension>"; stop_child; exit 1
@@ -540,14 +543,19 @@ await filtered-preview {PTY body ABC-11 version 1}
 # on the same issue regardless of how loaded metadata affects result ranking.
 send_key "\177"
 settle_output short-filter
+if {[capture_query short-filter-query] ne "'ABC-1"} { puts stderr "short filter did not expand to three matches"; stop_child; exit 1 }
 set boundary_keys {}
 foreach direction {"\033\[A" "\033\[B"} {
   send_key "$direction$direction$direction"
   settle_output filtered-boundary
+  # The query callback runs after queued keys and synchronous focus callbacks.
+  # Quiet PTY output alone does not guarantee the selection file is current.
+  capture_query filtered-boundary-barrier
   set boundary_key [string trim [slurp [file join $state sources source-source-terminal key]]]
   lappend boundary_keys $boundary_key
   send_key $direction
   settle_output past-filtered-boundary
+  capture_query past-filtered-boundary-barrier
   await_selected_key $boundary_key
 }
 if {[lindex $boundary_keys 0] eq [lindex $boundary_keys 1]} { puts stderr "filtered navigation did not reach distinct boundaries"; stop_child; exit 1 }
@@ -578,7 +586,7 @@ await copied-link {Copied link}
 send_key "\017"
 await opened-browser {Opened browser}
 await_feedback_clear browser-success
-if {[slurp [file join $viewer_dir ui-layout]] ne $feedback_base_layout} { puts stderr "feedback expiry did not restore preview space"; stop_child; exit 1 }
+await_layout [string trim $feedback_base_layout] feedback-preview-space-restored
 set f [open $action_failure w]; close $f
 send_key "\031"
 await copy-key-failure {Could not copy key}

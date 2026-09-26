@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.4.3 — 2026-09-26
+
+- Add opt-in amber highlighting of the selected key in the source terminal,
+  with a separately built native patch for Herdr 0.9.1 and Python 3.9+.
+  `SOURCE_HIGHLIGHT` defaults to `off`; stock servers show upgrade guidance.
+- Keep source text, input, focus, and scrolling unchanged. Native decorations
+  follow rendered cells, Unicode widths, soft wraps, and alternate screens.
+  Owner-scoped leases clear on close and expire after 1.5 seconds without renewal.
+- Retry source-status notifications when fzf is starting or a socket post
+  fails, and reserve no extra status row when highlighting succeeds.
+- Strengthen asynchronous terminal-test synchronization and add offline socket,
+  worker, lifecycle, UI, and native ANSI-rendering regressions.
+
 ## 0.4.2 — 2026-09-25
 
 - Scan recognized agent panes through passive visible and detection snapshots.

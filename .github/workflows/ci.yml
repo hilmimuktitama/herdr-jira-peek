@@ -65,7 +65,7 @@ jobs:
 
       - name: Check shell syntax
         run: |
-          for file in config.example.sh scripts/*.sh tests/*.sh; do
+          for file in config.example.sh scripts/*.sh tests/*.sh native/*.sh; do
             sh -n "$file" || exit
           done
 
@@ -75,8 +75,16 @@ jobs:
       - name: Run tests
         run: sh tests/run.sh
 
+      - name: Test native source highlight
+        run: |
+          python3 -c 'import sys; sys.exit(sys.version_info < (3, 9))'
+          PYTHONDONTWRITEBYTECODE=1 python3 tests/highlight-socket.py
+          PYTHONDONTWRITEBYTECODE=1 python3 tests/highlight-worker.py
+          PYTHONDONTWRITEBYTECODE=1 python3 tests/highlight-integration.py
+          sh tests/highlight-ui.sh
+
       - name: Run shellcheck
         run: |
           shellcheck --version
           test "$(shellcheck --version | sed -n 's/^version: //p')" = 0.11.0
-          shellcheck -s sh -e SC1090 config.example.sh scripts/*.sh tests/*.sh
+          shellcheck -s sh -e SC1090 config.example.sh scripts/*.sh tests/*.sh native/*.sh

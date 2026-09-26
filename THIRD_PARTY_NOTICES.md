@@ -12,6 +12,12 @@ its [Apache 2.0 license](https://github.com/herdrdev/herdr/blob/master/LICENSE),
 and [installation documentation](https://herdr.dev/docs/install/). Consult the
 installed distribution for notices applying to that version.
 
+The optional [native highlighting patch](native/herdr-0.9.1-highlight.patch)
+contains modified Herdr source and context from v0.9.1, revision
+`065ef9d6a531c49fb8bee7e818ef837065b21ee9`. It is distributed under the
+[Apache License 2.0](native/LICENSE-HERDR), with modifications identified by
+the patch hunks. This repository does not distribute a Herdr binary.
+
 ## Teamwork Graph CLI (TWG)
 
 The plugin calls the official Atlassian Teamwork Graph CLI for read-only Jira

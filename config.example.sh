@@ -38,6 +38,12 @@ MAX_CANDIDATES=20
 # Reopen the Peek pane after changing this setting.
 PICKER_LAYOUT='bottom'
 
+# Native source-terminal highlight for the currently selected Jira key.
+# Requires the patched Herdr build described in native/README.md.
+# 'off' preserves current behavior; 'auto' enables it when supported.
+# Reopen Peek after changing this setting.
+SOURCE_HIGHLIGHT='off'
+
 # Optional: override the scan expression instead of deriving it from JIRA_PROJECTS.
 # Detected keys must still match JIRA_PROJECTS; this cannot expand the allowlist.
 # KEY_RE='(ABC|DEF)-[0-9]+'

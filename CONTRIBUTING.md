@@ -27,6 +27,7 @@ images, and check image metadata for private information.
   or `curl` plus a private mode-600 netrc for the REST backend
 - A POSIX shell, `jq`, and `less`
 - `fzf` for running the plugin; `expect` for interactive PTY coverage (with `less`)
+- Python 3.9 or newer is optional for the experimental source-terminal highlight
 - ShellCheck 0.11.0 for the release lint gate (the version pinned in CI)
 
 ## Local development
@@ -48,6 +49,20 @@ cached issue data. Automated tests fake Herdr and the transport, so they do not
 require either CLI, credentials, or a live Jira site. Some checks use real `fzf`,
 `less`, and `expect` binaries.
 
+The optional `SOURCE_HIGHLIGHT='auto'` feature uses the patched Herdr native
+decoration API and Python 3.9 or newer to mark the selected issue key in the
+source pane. It defaults to off and reports unsupported servers. Selection is
+checked every 0.2 seconds; Herdr matches rendered cells on each redraw without
+reading terminal text through the API. For manual verification, use a disposable
+local Herdr pane containing only fictional keys such as `ABC-123`. Check selection
+changes, filter changes, no visible match, pane resize/scroll, Unicode before a
+key, and viewer close. Stock Herdr requires the [native patch](native/README.md).
+Confirm the mark clears when the selection changes or the viewer exits, and that
+the source process receives no input and the viewport does not move. Unsupported
+capability must leave the source display alone and keep the picker usable.
+Never use a connected work terminal or capture live Jira
+output for documentation.
+
 Connection lifecycle behavior follows staged activation, connection ID,
 flat-cache invalidation, and viewer epoch acceptance cases in
 [`docs/connection-lifecycle-plan.md`](docs/connection-lifecycle-plan.md).
@@ -61,11 +76,15 @@ OAuth sessions are used by these tests.
 Run the syntax check and test suite before opening a pull request:
 
 ```sh
-for file in config.example.sh scripts/*.sh tests/*.sh; do
+for file in config.example.sh scripts/*.sh tests/*.sh native/*.sh; do
   sh -n "$file" || exit
 done
 sh tests/run.sh
 sh tests/manifest.sh
+PYTHONDONTWRITEBYTECODE=1 python3 tests/highlight-socket.py
+PYTHONDONTWRITEBYTECODE=1 python3 tests/highlight-worker.py
+PYTHONDONTWRITEBYTECODE=1 python3 tests/highlight-integration.py
+sh tests/highlight-ui.sh
 ```
 
 Install `fzf`, `less`, and `expect` for complete interactive coverage. The PTY
@@ -79,7 +98,7 @@ upstream binaries on both macOS and Linux to keep lint results consistent.
 their checked-in helper through a path resolved at runtime:
 
 ```sh
-shellcheck -s sh -e SC1090 config.example.sh scripts/*.sh tests/*.sh
+shellcheck -s sh -e SC1090 config.example.sh scripts/*.sh tests/*.sh native/*.sh
 ```
 
 The supported local pager is `less`; `PAGER` is not an alternative requirement.
@@ -127,3 +146,18 @@ The PTY regression also reports the time for an arrow/filter burst to save the
 final selected key. Timing varies with machine load, so CI checks behavior
 rather than a fixed millisecond threshold. Keep configuration parsing, cache
 maintenance, and network access out of synchronous selection and typing callbacks.
+
+With the [native Herdr patch](native/README.md) built, run the ANSI rendering
+regression (install `pyte` in your test environment):
+
+```sh
+HERDR_NATIVE_TEST_BIN="$PWD/.local/bin/herdr-peek" python3 tests/highlight-live.py
+```
+
+This creates an isolated Herdr server and PTY with fictional text. It checks the
+actual emitted ANSI cell backgrounds, selection changes, source-text preservation,
+Unicode placement, alternate-screen redraws, ownership, and lease expiry. It
+requires local socket/PTY access and never connects to your live Herdr session.
+Also visually verify selection, output updates, and close/reopen in the target
+terminal using fictional fixtures from `docs/screenshots/capture.py`. A transport
+acknowledgement alone is not evidence of visible highlighting.

@@ -131,6 +131,10 @@ stop_tree() {
   kill -CONT "$p" 2>/dev/null || true; kill -TERM "$p" 2>/dev/null || true
 }
 viewer_cleanup() {
+  if [ -n "${viewer_highlight_worker:-}" ]; then
+    stop_tree "$viewer_highlight_worker" "$$" || true
+    wait "$viewer_highlight_worker" 2>/dev/null || true
+  fi
   if [ -n "${viewer_rescan_worker:-}" ]; then
     stop_tree "$viewer_rescan_worker" "$$" || true
     wait "$viewer_rescan_worker" 2>/dev/null || true
@@ -149,6 +153,31 @@ viewer_cleanup() {
 trap viewer_cleanup 0 1 2 15
 viewer_signal() { viewer_cleanup; trap - 0; exit 1; }
 trap viewer_signal 1 2 15
+
+# The source highlight is an opt-in, viewer-owned native text lease. Selection
+# callbacks only publish a key; the worker renews the Herdr decoration outside
+# fzf's input loop. A missing runtime leaves the picker usable.
+VIEWER_SOURCE_HIGHLIGHT_ENABLED=0
+if [ "$SOURCE_HIGHLIGHT" = auto ]; then
+  VIEWER_SOURCE_HIGHLIGHT_ENABLED=1
+  if command -v python3 >/dev/null 2>&1 \
+    && python3 -c 'import sys; sys.exit(sys.version_info < (3, 9))' >/dev/null 2>&1 \
+    && [ -n "${HERDR_SOCKET_PATH:-}" ] \
+    && [ -n "${HERDR_VIEWER_SOURCE_PANE:-}" ] \
+    && [ -n "${HERDR_VIEWER_SOURCE_TERMINAL:-}" ]; then
+    initial_highlight_key=$(sed -n '1p' "$VIEWER_KEY_FILE" 2>/dev/null || true)
+    if ! grep -Fqx -- "$initial_highlight_key" "$CANDIDATES_FILE"; then
+      initial_highlight_key=$(sed -n '1p' "$CANDIDATES_FILE")
+    fi
+    printf '%s\n' "$initial_highlight_key" > "$viewer_state/highlight-request"
+    printf '%s\n' 'Source: highlight unavailable' > "$viewer_state/highlight-status"
+    PYTHONDONTWRITEBYTECODE=1 python3 "$DIR/viewer-highlight.py" >/dev/null 2>&1 &
+    viewer_highlight_worker=$!
+  else
+    printf '%s\n' 'Source: highlight unavailable' > "$viewer_state/highlight-status"
+  fi
+fi
+export VIEWER_SOURCE_HIGHLIGHT_ENABLED
 
 # Row = KEY<TAB>display. fzf shows the display and hands scripts the key as {1}.
 export VIEWER_BOLD="$PEEK_BOLD" VIEWER_RESET="$PEEK_RESET" VIEWER_DIM="$PEEK_DIM"
@@ -204,11 +233,24 @@ else
   sh "$DIR/viewer-rows.sh" snapshot "$rows"
 fi
 export VIEWER_METADATA_MODE
+fzf_socket_enabled=$live_fzf
+if [ "$fzf_socket_enabled" -eq 0 ] \
+  && [ -n "${viewer_highlight_worker:-}" ] \
+  && command -v "${CURL_BIN_PATH:-curl}" >/dev/null 2>&1 \
+  && printf '%s\n' "$fzf_help" | grep -q -- '--listen-unsafe'; then
+  # Source status still needs a repaint even when metadata uses batch mode.
+  fzf_socket_enabled=1
+  viewer_socket=fzf.sock
+  export VIEWER_FZF_SOCKET="$viewer_socket"
+fi
 if [ "$live_fzf" -eq 1 ]; then
   sh "$DIR/viewer-ui.sh" watch-messages >/dev/null 2>&1 &
   viewer_feedback_worker=$!
   sh "$DIR/viewer-rescan.sh" --watch >/dev/null 2>&1 &
   viewer_rescan_worker=$!
+elif [ "$fzf_socket_enabled" -eq 1 ]; then
+  sh "$DIR/viewer-ui.sh" watch-messages >/dev/null 2>&1 &
+  viewer_feedback_worker=$!
 fi
 input_file=$rows
 
@@ -230,8 +272,12 @@ run_fzf() {
   fi
 }
 run_picker() {
-  if [ "$live_fzf" -eq 1 ]; then
-    (cd "$viewer_state" && run_fzf "$@" --id-nth 1 --track --listen-unsafe="$viewer_socket")
+  if [ "$fzf_socket_enabled" -eq 1 ]; then
+    if [ "$fzf_tracking" -eq 1 ]; then
+      (cd "$viewer_state" && run_fzf "$@" --id-nth 1 --track --listen-unsafe="$viewer_socket")
+    else
+      (cd "$viewer_state" && run_fzf "$@" --listen-unsafe="$viewer_socket")
+    fi
   elif [ "$fzf_tracking" -eq 1 ]; then
     run_fzf "$@" --id-nth 1 --track
   else
@@ -339,6 +385,11 @@ case "$fzf_status" in
     exit 0
     ;;
   2)
+    if [ -n "${viewer_highlight_worker:-}" ]; then
+      stop_tree "$viewer_highlight_worker" "$$" || true
+      wait "$viewer_highlight_worker" 2>/dev/null || true
+      viewer_highlight_worker=
+    fi
     if [ -n "${viewer_rescan_worker:-}" ]; then
       stop_tree "$viewer_rescan_worker" "$$" || true
       wait "$viewer_rescan_worker" 2>/dev/null || true

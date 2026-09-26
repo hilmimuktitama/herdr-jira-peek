@@ -1,0 +1,909 @@
+diff --git a/docs/next/api/herdr-api.schema.json b/docs/next/api/herdr-api.schema.json
+index 26299e7..5413959 100644
+--- a/docs/next/api/herdr-api.schema.json
++++ b/docs/next/api/herdr-api.schema.json
+@@ -2696,6 +2696,45 @@
+           ],
+           "type": "object"
+         },
++        "PaneHighlightClearParams": {
++          "properties": {
++            "owner": {
++              "type": "string"
++            },
++            "terminal_id": {
++              "type": "string"
++            }
++          },
++          "required": [
++            "terminal_id",
++            "owner"
++          ],
++          "type": "object"
++        },
++        "PaneHighlightSetParams": {
++          "description": "Renewable native text decoration; expires after 1500ms without renewal.",
++          "properties": {
++            "owner": {
++              "type": "string"
++            },
++            "pane_id": {
++              "type": "string"
++            },
++            "query": {
++              "type": "string"
++            },
++            "terminal_id": {
++              "type": "string"
++            }
++          },
++          "required": [
++            "pane_id",
++            "terminal_id",
++            "owner",
++            "query"
++          ],
++          "type": "object"
++        },
+         "PaneInputSetParams": {
+           "properties": {
+             "pane_id": {
+@@ -5963,6 +6002,38 @@
+           ],
+           "type": "object"
+         },
++        {
++          "properties": {
++            "method": {
++              "const": "pane.highlight.set",
++              "type": "string"
++            },
++            "params": {
++              "$ref": "#/schemas/request/$defs/PaneHighlightSetParams"
++            }
++          },
++          "required": [
++            "method",
++            "params"
++          ],
++          "type": "object"
++        },
++        {
++          "properties": {
++            "method": {
++              "const": "pane.highlight.clear",
++              "type": "string"
++            },
++            "params": {
++              "$ref": "#/schemas/request/$defs/PaneHighlightClearParams"
++            }
++          },
++          "required": [
++            "method",
++            "params"
++          ],
++          "type": "object"
++        },
+         {
+           "properties": {
+             "method": {
+diff --git a/src/api/mod.rs b/src/api/mod.rs
+index d28a82a..27cd790 100644
+--- a/src/api/mod.rs
++++ b/src/api/mod.rs
+@@ -63,6 +63,8 @@ pub(crate) fn request_changes_ui(request: &Request) -> bool {
+             | Method::PaneFocus(_)
+             | Method::PaneInputSet(_)
+             | Method::PaneRename(_)
++            | Method::PaneHighlightSet(_)
++            | Method::PaneHighlightClear(_)
+             | Method::PaneGraphicsSet(_)
+             | Method::PaneGraphicsClear(_)
+             | Method::PaneGraphicsStream(_)
+diff --git a/src/api/schema.rs b/src/api/schema.rs
+index 7c58fb6..40f26f2 100644
+--- a/src/api/schema.rs
++++ b/src/api/schema.rs
+@@ -197,6 +197,10 @@ pub enum Method {
+     PaneSendInput(PaneSendInputParams),
+     #[serde(rename = "pane.read")]
+     PaneRead(PaneReadParams),
++    #[serde(rename = "pane.highlight.set")]
++    PaneHighlightSet(PaneHighlightSetParams),
++    #[serde(rename = "pane.highlight.clear")]
++    PaneHighlightClear(PaneHighlightClearParams),
+     #[serde(rename = "pane.graphics.set")]
+     PaneGraphicsSet(PaneGraphicsSetParams),
+     #[serde(rename = "pane.graphics.clear")]
+diff --git a/src/api/schema/panes.rs b/src/api/schema/panes.rs
+index 6cbcaf4..dc9ea90 100644
+--- a/src/api/schema/panes.rs
++++ b/src/api/schema/panes.rs
+@@ -770,3 +770,17 @@ pub struct PaneLinkRegion {
+     pub start_col: u16,
+     pub end_col: u16,
+ }
++
++/// Renewable native text decoration; expires after 1500ms without renewal.
++#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
++pub struct PaneHighlightSetParams {
++    pub pane_id: String,
++    pub terminal_id: String,
++    pub owner: String,
++    pub query: String,
++}
++#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
++pub struct PaneHighlightClearParams {
++    pub terminal_id: String,
++    pub owner: String,
++}
+diff --git a/src/api/server.rs b/src/api/server.rs
+index ea7597e..60a8c11 100644
+--- a/src/api/server.rs
++++ b/src/api/server.rs
+@@ -460,6 +460,8 @@ pub(crate) fn api_method_name(method: &Method) -> &'static str {
+         Method::PaneSendKeys(_) => "pane.send_keys",
+         Method::PaneSendInput(_) => "pane.send_input",
+         Method::PaneRead(_) => "pane.read",
++        Method::PaneHighlightSet(_) => "pane.highlight.set",
++        Method::PaneHighlightClear(_) => "pane.highlight.clear",
+         Method::PaneGraphicsSet(_) => "pane.graphics.set",
+         Method::PaneGraphicsClear(_) => "pane.graphics.clear",
+         Method::PaneGraphicsInfo(_) => "pane.graphics.info",
+diff --git a/src/app/api.rs b/src/app/api.rs
+index 1270fef..128d595 100644
+--- a/src/app/api.rs
++++ b/src/app/api.rs
+@@ -6,6 +6,7 @@ mod env;
+ mod integrations;
+ mod layouts;
+ mod pane_graphics;
++mod pane_highlight;
+ mod panes;
+ pub(crate) mod plugins;
+ pub(super) mod responses;
+@@ -1126,6 +1127,12 @@ impl App {
+             }
+             Method::PaneRename(params) => return self.handle_pane_rename(request.id, params),
+             Method::PaneRead(params) => return self.handle_pane_read(request.id, params),
++            Method::PaneHighlightSet(params) => {
++                return self.handle_pane_highlight_set(request.id, params)
++            }
++            Method::PaneHighlightClear(params) => {
++                return self.handle_pane_highlight_clear(request.id, params)
++            }
+             Method::PaneGraphicsSet(params) => {
+                 return self.handle_pane_graphics_set(request.id, params);
+             }
+diff --git a/src/app/mod.rs b/src/app/mod.rs
+index 757a7f6..c4c80d0 100644
+--- a/src/app/mod.rs
++++ b/src/app/mod.rs
+@@ -18,6 +18,7 @@ mod custom_commands;
+ mod git_refresh;
+ mod ids;
+ pub(crate) mod pane_graphics;
++pub(crate) mod pane_highlight;
+ mod popup;
+ mod runtime;
+ mod session;
+@@ -104,6 +105,7 @@ impl AppPolicy {
+ pub struct App {
+     pub state: AppState,
+     pub(crate) pane_graphics: pane_graphics::Runtime,
++    pub(crate) pane_highlights: pane_highlight::Runtime,
+     pub(crate) pane_graphics_files: Arc<crate::pane_graphics_files::FileStore>,
+     pub(crate) direct_graphics_available: bool,
+     pub(crate) pixel_mouse_available: bool,
+@@ -573,6 +575,7 @@ impl App {
+             last_api_notification_at: None,
+             state,
+             pane_graphics: pane_graphics::Runtime::default(),
++            pane_highlights: pane_highlight::Runtime::default(),
+             pane_graphics_files: Arc::new(crate::pane_graphics_files::FileStore::default()),
+             direct_graphics_available: false,
+             pixel_mouse_available: false,
+diff --git a/src/ghostty/mod.rs b/src/ghostty/mod.rs
+index d1748aa..fd696e3 100644
+--- a/src/ghostty/mod.rs
++++ b/src/ghostty/mod.rs
+@@ -3063,7 +3063,6 @@ impl<'a> RowIter<'a> {
+         Ok(dirty)
+     }
+ 
+-    #[cfg(windows)]
+     pub fn wrap_state(&self) -> Result<(bool, bool), Error> {
+         let mut row = 0;
+         // SAFETY: row output matches requested row data type.
+diff --git a/src/pane.rs b/src/pane.rs
+index ec1b864..2207c31 100644
+--- a/src/pane.rs
++++ b/src/pane.rs
+@@ -3137,6 +3137,17 @@ impl PaneRuntime {
+         self.terminal.render(frame, area, show_cursor);
+     }
+ 
++    pub(crate) fn render_highlighted(
++        &self,
++        frame: &mut Frame,
++        area: Rect,
++        show_cursor: bool,
++        query: Option<&str>,
++    ) {
++        self.terminal
++            .render_highlighted(frame, area, show_cursor, query);
++    }
++
+     pub(crate) fn collect_dirty_patch_snapshot(
+         &self,
+         area_width: u16,
+diff --git a/src/pane/terminal.rs b/src/pane/terminal.rs
+index 4a6bc17..e057e62 100644
+--- a/src/pane/terminal.rs
++++ b/src/pane/terminal.rs
+@@ -530,6 +530,17 @@ impl PaneTerminal {
+         self.ghostty.render(frame, area, show_cursor);
+     }
+ 
++    pub(crate) fn render_highlighted(
++        &self,
++        frame: &mut Frame,
++        area: Rect,
++        show_cursor: bool,
++        query: Option<&str>,
++    ) {
++        self.ghostty
++            .render_highlighted(frame, area, show_cursor, query);
++    }
++
+     pub fn collect_dirty_patch(
+         &self,
+         area_width: u16,
+@@ -2310,6 +2321,16 @@ impl GhosttyPaneTerminal {
+     }
+ 
+     pub fn render(&self, frame: &mut Frame, area: Rect, show_cursor: bool) {
++        self.render_highlighted(frame, area, show_cursor, None);
++    }
++
++    pub(crate) fn render_highlighted(
++        &self,
++        frame: &mut Frame,
++        area: Rect,
++        show_cursor: bool,
++        query: Option<&str>,
++    ) {
+         let Ok(mut core) = self.core.lock() else {
+             return;
+         };
+@@ -2345,6 +2366,7 @@ impl GhosttyPaneTerminal {
+             Ok(cells) => cells,
+             Err(_) => return,
+         };
++        let mut wraps_for_highlight = Vec::new();
+         {
+             let buf = frame.buffer_mut();
+             let mut rows = match render_state.populate_row_iterator(&mut row_iterator) {
+@@ -2355,6 +2377,9 @@ impl GhosttyPaneTerminal {
+             let mut symbol_scratch = String::new();
+             let mut y = 0u16;
+             while y < area.height && rows.next() {
++                if query.is_some() {
++                    wraps_for_highlight.push(rows.wrap_state().map(|w| w.0).unwrap_or(false));
++                }
+                 let mut cells = match rows.populate_cells(&mut row_cells) {
+                     Ok(cells) => cells,
+                     Err(_) => break,
+@@ -2407,6 +2432,14 @@ impl GhosttyPaneTerminal {
+             }
+         }
+ 
++        if let Some(query) = query {
++            crate::app::pane_highlight::decorate(
++                frame.buffer_mut(),
++                area,
++                &wraps_for_highlight,
++                query,
++            );
++        }
+         ghostty_clear_render_dirty(render_state, area.height);
+ 
+         let current_cursor = cursor_state_from_render_state(render_state, decscusr_tracker);
+diff --git a/src/pane/terminal/migration_tests.rs b/src/pane/terminal/migration_tests.rs
+index 94d78a7..4f11d1d 100644
+--- a/src/pane/terminal/migration_tests.rs
++++ b/src/pane/terminal/migration_tests.rs
+@@ -380,3 +380,74 @@ fn capture_bounded_migration_observations() {
+     }
+     assert_eq!(observations.last().unwrap(), &terminal.observe());
+ }
++
++#[test]
++fn native_highlight_real_terminal_wrap_and_alternate_screen_preserve_text() {
++    let mut harness = Harness::new(12, 4);
++    for prefix in ["", "\x1b[?1049h"] {
++        harness.write(format!("{prefix}\x1b[2J\x1b[H界 DEMO-1042 DEMO-10420").as_bytes());
++        let original = harness.pane.visible_text();
++        let mut terminal =
++            ratatui::Terminal::new(ratatui::backend::TestBackend::new(12, 4)).unwrap();
++        terminal
++            .draw(|frame| {
++                harness
++                    .pane
++                    .render_highlighted(frame, frame.area(), false, Some("DEMO-1042"))
++            })
++            .unwrap();
++        let marked = terminal
++            .backend()
++            .buffer()
++            .content
++            .iter()
++            .filter(|cell| cell.bg == Color::Rgb(255, 191, 53))
++            .count();
++        assert_eq!(marked, 9);
++        assert_eq!(harness.pane.visible_text(), original);
++        terminal
++            .draw(|frame| harness.pane.render(frame, frame.area(), false))
++            .unwrap();
++        assert!(!terminal
++            .backend()
++            .buffer()
++            .content
++            .iter()
++            .any(|cell| cell.bg == Color::Rgb(255, 191, 53)));
++    }
++}
++
++#[test]
++#[ignore = "manual native highlight render scaling profile"]
++fn native_highlight_render_scale_profile() {
++    for count in [1, 15] {
++        let mut panes = (0..count).map(|_| Harness::new(80, 24)).collect::<Vec<_>>();
++        for pane in &mut panes {
++            for _ in 0..30 {
++                pane.write("界 DEMO-1042 fictional populated row DEMO-10420\r\n".as_bytes());
++            }
++        }
++        for highlight in [false, true] {
++            let mut term =
++                ratatui::Terminal::new(ratatui::backend::TestBackend::new(80, 24)).unwrap();
++            let start = std::time::Instant::now();
++            for _ in 0..100 {
++                for pane in &panes {
++                    term.draw(|frame| {
++                        pane.pane.render_highlighted(
++                            frame,
++                            frame.area(),
++                            false,
++                            highlight.then_some("DEMO-1042"),
++                        )
++                    })
++                    .unwrap();
++                }
++            }
++            eprintln!(
++                "native highlight panes={count} enabled={highlight}: {:.2} us/frame",
++                start.elapsed().as_secs_f64() * 1_000_000.0 / 100.0
++            );
++        }
++    }
++}
+diff --git a/src/server/client_shell.rs b/src/server/client_shell.rs
+index 3747069..32b850b 100644
+--- a/src/server/client_shell.rs
++++ b/src/server/client_shell.rs
+@@ -287,6 +287,7 @@ pub(super) fn render_pane_surface(
+         crate::server::render_stream::render_tab_surface_virtual(
+             &app.state,
+             &app.terminal_runtimes,
++            &app.pane_highlights,
+             target,
+             area,
+             resize_panes,
+diff --git a/src/server/headless.rs b/src/server/headless.rs
+index f07c0c3..2b577ec 100644
+--- a/src/server/headless.rs
++++ b/src/server/headless.rs
+@@ -524,6 +524,12 @@ impl HeadlessServer {
+                 crate::render_prof::event("full_render_cause.default_workspace");
+             }
+ 
++            if self.app.pane_highlights.expire(now) {
++                needs_render = true;
++                needs_full_render = true;
++                needs_graphics_render = false;
++            }
++
+             if self.retain_live_pane_graphics() {
+                 needs_render = true;
+                 needs_graphics_render = true;
+@@ -3023,6 +3029,11 @@ impl HeadlessServer {
+             _ => {}
+         }
+ 
++        let highlight_revision_before = matches!(
++            &msg.request.method,
++            api::schema::Method::PaneHighlightSet(_) | api::schema::Method::PaneHighlightClear(_)
++        )
++        .then_some(self.app.pane_highlights.revision);
+         let pane_graphics_revision_before = matches!(
+             &msg.request.method,
+             api::schema::Method::PaneGraphicsSet(_)
+@@ -3032,7 +3043,9 @@ impl HeadlessServer {
+         )
+         .then_some(self.app.pane_graphics.revision());
+         let mut changed = metadata_expired
+-            | (pane_graphics_revision_before.is_none() && api::request_changes_ui(&msg.request));
++            | (pane_graphics_revision_before.is_none()
++                && highlight_revision_before.is_none()
++                && api::request_changes_ui(&msg.request));
+         let skip_default_workspace = skip_default_workspace_for_request
+             || matches!(
+                 &msg.request.method,
+@@ -3173,6 +3186,9 @@ impl HeadlessServer {
+         }
+         let _ = msg.respond_to.send(response);
+ 
++        if let Some(before) = highlight_revision_before {
++            changed |= before != self.app.pane_highlights.revision;
++        }
+         if let Some(revision_before) = pane_graphics_revision_before {
+             changed |= revision_before != self.app.pane_graphics.revision();
+         }
+diff --git a/src/server/headless/render.rs b/src/server/headless/render.rs
+index dd2cce3..285e7bd 100644
+--- a/src/server/headless/render.rs
++++ b/src/server/headless/render.rs
+@@ -623,7 +623,19 @@ impl HeadlessServer {
+                     };
+                     let render_started = crate::render_prof::timer();
+                     let (buffer, cursor) =
+-                        crate::server::render_stream::render_terminal_virtual(runtime, area);
++                        crate::server::render_stream::render_terminal_highlighted_virtual(
++                            runtime,
++                            area,
++                            self.app
++                                .pane_highlights
++                                .leases
++                                .iter()
++                                .find(|(id, lease)| {
++                                    id.as_str() == terminal_id
++                                        && lease.expires > std::time::Instant::now()
++                                })
++                                .map(|(_, lease)| lease.query.as_str()),
++                        );
+                     crate::render_prof::duration_since(
+                         "full_render.render_terminal_virtual",
+                         render_started,
+diff --git a/src/server/headless/retained_surface.rs b/src/server/headless/retained_surface.rs
+index 2a637ea..dfdefc4 100644
+--- a/src/server/headless/retained_surface.rs
++++ b/src/server/headless/retained_surface.rs
+@@ -320,6 +320,14 @@ impl HeadlessServer {
+             ) else {
+                 fallback!("runtime_missing");
+             };
++            if self
++                .app
++                .state
++                .terminal_id_for_pane(workspace_index, pane_id)
++                .is_some_and(|id| self.app.pane_highlights.query(&id).is_some())
++            {
++                fallback!("text_highlight");
++            }
+             let Some(snapshot) = runtime.collect_dirty_patch_snapshot(width, height) else {
+                 fallback!("terminal_snapshot");
+             };
+diff --git a/src/server/render_stream.rs b/src/server/render_stream.rs
+index b0af26d..1fc6399 100644
+--- a/src/server/render_stream.rs
++++ b/src/server/render_stream.rs
+@@ -472,6 +472,7 @@ pub(crate) type RenderedTabSurface = (
+ pub(crate) fn render_tab_surface_virtual(
+     app_state: &AppState,
+     terminal_runtimes: &TerminalRuntimeRegistry,
++    highlights: &crate::app::pane_highlight::Runtime,
+     target: Option<crate::ui::TabSurfaceTarget>,
+     area: Rect,
+     resize_panes: bool,
+@@ -497,7 +498,7 @@ pub(crate) fn render_tab_surface_virtual(
+     let mut terminal = ratatui::Terminal::new(backend).expect("TestBackend::new should never fail");
+     terminal
+         .draw(|frame| {
+-            crate::ui::render_tab_surface(app_state, terminal_runtimes, surface, frame);
++            crate::ui::render_tab_surface(app_state, terminal_runtimes, highlights, surface, frame);
+         })
+         .expect("render to TestBackend should never fail");
+ 
+@@ -513,6 +514,14 @@ pub(crate) fn render_tab_surface_virtual(
+ pub(crate) fn render_terminal_virtual(
+     runtime: &crate::terminal::TerminalRuntime,
+     area: Rect,
++) -> (ratatui::buffer::Buffer, Option<CursorState>) {
++    render_terminal_highlighted_virtual(runtime, area, None)
++}
++
++pub(crate) fn render_terminal_highlighted_virtual(
++    runtime: &crate::terminal::TerminalRuntime,
++    area: Rect,
++    query: Option<&str>,
+ ) -> (ratatui::buffer::Buffer, Option<CursorState>) {
+     let suppress_cursor = runtime.synchronized_output_active();
+     let backend = CursorTrackingBackend::new(area.width, area.height);
+@@ -520,7 +529,7 @@ pub(crate) fn render_terminal_virtual(
+ 
+     terminal
+         .draw(|frame| {
+-            runtime.render(frame, area, true);
++            runtime.render_highlighted(frame, area, true, query);
+         })
+         .expect("render to TestBackend should never fail");
+ 
+diff --git a/src/terminal/runtime.rs b/src/terminal/runtime.rs
+index 4679579..4eb4f66 100644
+--- a/src/terminal/runtime.rs
++++ b/src/terminal/runtime.rs
+@@ -411,6 +411,16 @@ impl TerminalRuntime {
+         self.0.render(frame, area, show_cursor);
+     }
+ 
++    pub(crate) fn render_highlighted(
++        &self,
++        frame: &mut Frame,
++        area: Rect,
++        show_cursor: bool,
++        query: Option<&str>,
++    ) {
++        self.0.render_highlighted(frame, area, show_cursor, query);
++    }
++
+     pub(crate) fn collect_dirty_patch_snapshot(
+         &self,
+         area_width: u16,
+diff --git a/src/ui/panes.rs b/src/ui/panes.rs
+index ab3e352..894324f 100644
+--- a/src/ui/panes.rs
++++ b/src/ui/panes.rs
+@@ -387,6 +387,7 @@ fn compute_pane_infos(
+ pub(super) fn render_panes(
+     app: &AppState,
+     terminal_runtimes: &TerminalRuntimeRegistry,
++    highlights: &crate::app::pane_highlight::Runtime,
+     frame: &mut Frame,
+     target: Option<super::tab_surface::TabSurfaceTarget>,
+     pane_infos: &[PaneInfo],
+@@ -404,7 +405,14 @@ pub(super) fn render_panes(
+             let show_cursor = info.is_focused
+                 && !pane_is_scrolled_back(rt)
+                 && app.pane_exposes_host_cursor(ws_idx, info.id);
+-            rt.render(frame, info.inner_rect, show_cursor);
++            let query = ws
++                .pane_state(info.id)
++                .and_then(|pane| highlights.query(&pane.attached_terminal_id));
++            if query.is_some() {
++                rt.render_highlighted(frame, info.inner_rect, show_cursor, query);
++            } else {
++                rt.render(frame, info.inner_rect, show_cursor);
++            }
+             render_pane_scrollbar(app, frame, info, rt);
+         }
+     }
+diff --git a/src/ui/tab_surface.rs b/src/ui/tab_surface.rs
+index d7b80bf..b796179 100644
+--- a/src/ui/tab_surface.rs
++++ b/src/ui/tab_surface.rs
+@@ -119,12 +119,14 @@ pub(crate) fn resize_tab_surface(
+ pub(crate) fn render_tab_surface(
+     app: &AppState,
+     terminal_runtimes: &TerminalRuntimeRegistry,
++    highlights: &crate::app::pane_highlight::Runtime,
+     surface: TabSurfaceView<'_>,
+     frame: &mut Frame,
+ ) {
+     render_panes(
+         app,
+         terminal_runtimes,
++        highlights,
+         frame,
+         surface.target,
+         surface.pane_infos,
+@@ -264,7 +266,13 @@ mod tests {
+             Terminal::new(TestBackend::new(full_area.width, full_area.height)).unwrap();
+         terminal
+             .draw(|frame| {
+-                render_tab_surface(&app, &TerminalRuntimeRegistry::new(), surface_view, frame)
++                render_tab_surface(
++                    &app,
++                    &TerminalRuntimeRegistry::new(),
++                    &crate::app::pane_highlight::Runtime::default(),
++                    surface_view,
++                    frame,
++                )
+             })
+             .unwrap();
+ 
+diff --git a/src/app/pane_highlight.rs b/src/app/pane_highlight.rs
+new file mode 100644
+index 0000000..2633ff1
+--- /dev/null
++++ b/src/app/pane_highlight.rs
+@@ -0,0 +1,159 @@
++//! Ephemeral text decorations. These never alter terminal contents or input.
++use crate::terminal::TerminalId;
++use ratatui::{
++    buffer::Buffer,
++    layout::Rect,
++    style::{Color, Modifier},
++};
++use std::{
++    collections::HashMap,
++    time::{Duration, Instant},
++};
++
++pub(crate) struct Lease {
++    pub owner: String,
++    pub query: String,
++    pub expires: Instant,
++}
++#[derive(Default)]
++pub(crate) struct Runtime {
++    pub leases: HashMap<TerminalId, Lease>,
++    pub revision: u64,
++}
++impl Runtime {
++    pub fn query(&self, id: &TerminalId) -> Option<&str> {
++        self.leases
++            .get(id)
++            .filter(|lease| lease.expires > Instant::now())
++            .map(|lease| lease.query.as_str())
++    }
++    pub fn expire(&mut self, now: Instant) -> bool {
++        let before = self.leases.len();
++        self.leases.retain(|_, lease| lease.expires > now);
++        self.leases.len() != before
++    }
++}
++pub(crate) const LEASE_DURATION: Duration = Duration::from_millis(1500);
++
++/// Match the rendered cell symbols, with real soft-wrap boundaries. Mapping bytes
++/// back to cells keeps wide glyphs and combining sequences from shifting markers.
++/// The terminal lock is held by the caller, so wrap metadata and cells agree.
++pub(crate) fn decorate(buf: &mut Buffer, area: Rect, wraps: &[bool], query: &str) {
++    if query.is_empty() {
++        return;
++    }
++    let mut text = String::new();
++    let mut positions = Vec::new();
++    for y in 0..area.height {
++        for x in 0..area.width {
++            let symbol = buf[(area.x + x, area.y + y)].symbol();
++            text.push_str(symbol);
++            positions.extend(std::iter::repeat_n((area.x + x, area.y + y), symbol.len()));
++        }
++        if !wraps.get(usize::from(y)).copied().unwrap_or(false) {
++            text.push('\n');
++            positions.push((u16::MAX, u16::MAX));
++        }
++    }
++    let word = |b: u8| b.is_ascii_alphanumeric() || b == b'_' || b == b'-';
++    for (start, _) in text.match_indices(query) {
++        let end = start + query.len();
++        if start
++            .checked_sub(1)
++            .is_some_and(|i| word(text.as_bytes()[i]))
++            || text.as_bytes().get(end).copied().is_some_and(word)
++        {
++            continue;
++        }
++        for &(x, y) in &positions[start..end] {
++            if let Some(cell) = buf.cell_mut((x, y)) {
++                cell.set_fg(Color::Rgb(24, 20, 12));
++                cell.set_bg(Color::Rgb(255, 191, 53));
++                cell.modifier.remove(Modifier::REVERSED | Modifier::DIM);
++                cell.modifier.insert(Modifier::BOLD);
++            }
++        }
++    }
++}
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++    use ratatui::style::Style;
++    fn buffer(text: &[&str], width: u16) -> Buffer {
++        let mut buf = Buffer::empty(Rect::new(0, 0, width, text.len() as u16));
++        for (y, line) in text.iter().enumerate() {
++            buf.set_string(
++                0,
++                y as u16,
++                line,
++                Style::default()
++                    .fg(Color::Cyan)
++                    .add_modifier(Modifier::UNDERLINED),
++            );
++        }
++        buf
++    }
++    fn marked(buf: &Buffer) -> usize {
++        buf.content
++            .iter()
++            .filter(|c| c.bg == Color::Rgb(255, 191, 53))
++            .count()
++    }
++    #[test]
++    fn native_highlight_exact_tokens_preserve_symbols_and_links_style() {
++        let mut buf = buffer(&["DEMO-42 DEMO-420 XDEMO-42 DEMO-42x (DEMO-42)"], 60);
++        let original: Vec<_> = buf.content.iter().map(|c| c.symbol().to_owned()).collect();
++        let area = buf.area;
++        decorate(&mut buf, area, &[false], "DEMO-42");
++        assert_eq!(marked(&buf), 14);
++        assert_eq!(
++            original,
++            buf.content
++                .iter()
++                .map(|c| c.symbol().to_owned())
++                .collect::<Vec<_>>()
++        );
++        assert!(buf[(0, 0)].modifier.contains(Modifier::UNDERLINED));
++    }
++    #[test]
++    fn native_highlight_unicode_cells_do_not_shift_matches() {
++        let mut buf = buffer(&["界 e\u{301} DEMO-42"], 30);
++        let area = buf.area;
++        decorate(&mut buf, area, &[false], "DEMO-42");
++        assert_eq!(marked(&buf), 7);
++        assert_eq!(buf[(5, 0)].symbol(), "D");
++        assert_eq!(buf[(5, 0)].bg, Color::Rgb(255, 191, 53));
++    }
++    #[test]
++    fn native_highlight_soft_wraps_only_and_boundary_across_wrap() {
++        let mut soft = buffer(&["xx DEMO-", "42      "], 8);
++        let area = soft.area;
++        decorate(&mut soft, area, &[true, false], "DEMO-42");
++        assert_eq!(marked(&soft), 7);
++        let mut hard = buffer(&["xx DEMO-", "42      "], 8);
++        decorate(&mut hard, area, &[false, false], "DEMO-42");
++        assert_eq!(marked(&hard), 0);
++        let mut longer = buffer(&["xx DEMO-", "420     "], 8);
++        decorate(&mut longer, area, &[true, false], "DEMO-42");
++        assert_eq!(marked(&longer), 0);
++    }
++    #[test]
++    fn native_highlight_lease_expires_without_output() {
++        let mut runtime = Runtime::default();
++        let id = TerminalId::alloc();
++        let now = Instant::now();
++        runtime.leases.insert(
++            id.clone(),
++            Lease {
++                owner: "test-owner".into(),
++                query: "DEMO-42".into(),
++                expires: now + LEASE_DURATION,
++            },
++        );
++        assert_eq!(runtime.query(&id), Some("DEMO-42"));
++        assert!(!runtime.expire(now));
++        assert!(runtime.expire(now + LEASE_DURATION));
++        assert_eq!(runtime.query(&id), None);
++    }
++}
+diff --git a/src/app/api/pane_highlight.rs b/src/app/api/pane_highlight.rs
+new file mode 100644
+index 0000000..f283b83
+--- /dev/null
++++ b/src/app/api/pane_highlight.rs
+@@ -0,0 +1,86 @@
++use super::responses::{encode_error, encode_success};
++use crate::{
++    api::schema::{PaneHighlightClearParams, PaneHighlightSetParams, ResponseResult},
++    app::{
++        pane_highlight::{Lease, LEASE_DURATION},
++        App,
++    },
++};
++impl App {
++    pub(super) fn handle_pane_highlight_set(
++        &mut self,
++        id: String,
++        params: PaneHighlightSetParams,
++    ) -> String {
++        let Some((ws, pane)) = self.parse_pane_id(&params.pane_id) else {
++            return encode_error(id, "pane_not_found", "source pane unavailable");
++        };
++        let Some(terminal) = self
++            .state
++            .terminal_id_for_pane(ws, pane)
++            .filter(|t| t.as_str() == params.terminal_id)
++        else {
++            return encode_error(id, "terminal_mismatch", "source terminal changed");
++        };
++        if params.owner.is_empty()
++            || params.owner.len() > 96
++            || params.query.is_empty()
++            || params.query.len() > 128
++            || !params
++                .query
++                .bytes()
++                .all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-')
++        {
++            return encode_error(
++                id,
++                "invalid_highlight",
++                "expected a bounded literal ASCII token and owner",
++            );
++        }
++        let now = std::time::Instant::now();
++        if self
++            .pane_highlights
++            .leases
++            .get(&terminal)
++            .is_some_and(|l| l.expires > now && l.owner != params.owner)
++        {
++            return encode_error(id, "highlight_busy", "source already has a highlight owner");
++        }
++        if !self.pane_highlights.leases.contains_key(&terminal)
++            && self.pane_highlights.leases.len() >= 64
++        {
++            return encode_error(id, "highlight_limit", "too many highlighted terminals");
++        }
++        if self
++            .pane_highlights
++            .leases
++            .get(&terminal)
++            .is_none_or(|l| l.expires <= now || l.query != params.query)
++        {
++            self.pane_highlights.revision = self.pane_highlights.revision.wrapping_add(1);
++        }
++        self.pane_highlights.leases.insert(
++            terminal,
++            Lease {
++                owner: params.owner,
++                query: params.query,
++                expires: now + LEASE_DURATION,
++            },
++        );
++        encode_success(id, ResponseResult::Ok {})
++    }
++    pub(super) fn handle_pane_highlight_clear(
++        &mut self,
++        id: String,
++        params: PaneHighlightClearParams,
++    ) -> String {
++        let before = self.pane_highlights.leases.len();
++        self.pane_highlights.leases.retain(|terminal, lease| {
++            terminal.as_str() != params.terminal_id || lease.owner != params.owner
++        });
++        if self.pane_highlights.leases.len() != before {
++            self.pane_highlights.revision = self.pane_highlights.revision.wrapping_add(1);
++        }
++        encode_success(id, ResponseResult::Ok {})
++    }
++}
+diff --git a/docs/next/website/src/content/docs/native-highlighting.md b/docs/next/website/src/content/docs/native-highlighting.md
+new file mode 100644
+index 0000000..5cc198b
+--- /dev/null
++++ b/docs/next/website/src/content/docs/native-highlighting.md
+@@ -0,0 +1,22 @@
++---
++title: Native text highlighting
++description: Ephemeral source-terminal text decorations for local integrations.
++---
++
++The local Jira Peek patch adds `pane.highlight.set` and `pane.highlight.clear`.
++These methods decorate rendered terminal cells without changing terminal data,
++sending process input, moving focus, or scrolling. They require no image protocol.
++
++Set accepts `pane_id`, the expected `terminal_id`, a unique `owner`, and an ASCII
++literal `query` of 1–128 bytes. A matching terminal identity is mandatory. An active
++lease owned by another integration is rejected. Renew within 1500 milliseconds;
++expired leases are removed and redraw the source even without PTY output.
++
++Clear accepts `terminal_id` and `owner`, and removes only that owner's lease.
++Generate a new random owner for every integration instance. Leases are runtime
++state and are not persisted or transferred during handoff.
++
++Matching occurs during rendering for pane surfaces and direct terminal clients,
++including normal and alternate buffers. Token boundaries, cell widths, and real
++terminal soft wraps are respected. Hard line breaks emitted by an application
++remain separate. Existing links, cursor placement, and concealed text are retained.

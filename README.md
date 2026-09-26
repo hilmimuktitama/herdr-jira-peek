@@ -113,6 +113,7 @@ JIRA_PROJECTS='ABC|DEF'
 PICKER_LAYOUT='bottom'
 CACHE_TTL_MIN=10
 MAX_CANDIDATES=20
+SOURCE_HIGHLIGHT='off'
 ```
 
 - `JIRA_BASE` is your site's HTTPS origin, without a trailing slash or path.
@@ -124,11 +125,29 @@ MAX_CANDIDATES=20
   for other local state.
 - `MAX_CANDIDATES` sets how many issues preload metadata (1–100). All detected
   keys remain searchable; older issues load when selected.
+- `SOURCE_HIGHLIGHT='auto'` enables native amber highlighting of the selected
+  key in the original terminal. Requires Python 3.9+ and the
+  [patched Herdr build](native/README.md); stock Herdr 0.9.1 has no native
+  decoration API. It is off by default. Reopen Peek after changing the setting.
 
 See [config.example.sh](config.example.sh) for all settings. Use one literal
 `NAME=value` assignment per line; keep credentials outside this file. Close
 viewers before changing configuration, then run **Check Peek for Jira** and
 reopen Peek.
+
+Herdr matches and styles the actual rendered text cells on every redraw. This
+works in Zed's embedded terminal, including OpenCode and Claude Code, without
+Kitty graphics. Markers follow selection changes, terminal output, scrolling,
+resizing, and normal/alternate screen changes. Matching respects token boundaries,
+Unicode cell widths, and terminal soft wraps. Application-inserted hard line breaks
+remain separate: a key split by the application's own layout is not joined.
+
+Peek never sends input, changes focus, or scrolls the source to make a key visible.
+The decoration follows the original terminal identity when a pane moves. Closing
+Peek clears it; if Peek crashes or loses its connection, Herdr removes it after
+1.5 seconds without renewal. Successful highlighting adds no status text or extra
+row; keys outside the visible viewport stay unmarked.
+Older Herdr builds show `Source: native highlight requires Herdr update`.
 
 ### Choose your fields
 
@@ -214,6 +233,11 @@ configuration, dependencies, and Jira access.
   your account's access, then rerun the check.
 - **No issues found:** focus a terminal containing a Jira key whose project is
   in `JIRA_PROJECTS`. A custom `KEY_RE` must match it too.
+- **Source highlight is missing:** confirm `SOURCE_HIGHLIGHT='auto'`, Python
+  3.9+, and the [native Herdr patch](native/README.md), then reopen Peek. The
+  running server must support `pane.highlight.set`; updating only the plugin
+  cannot add that capability. Only visible, complete keys or terminal-soft-wrapped
+  keys are marked.
 - **Numbered recovery menu:** fzf failed to start. Review the displayed
   diagnostic and upgrade fzf; the menu shows its own controls.
 - **Shortcut does nothing:** check for a conflicting binding, confirm the

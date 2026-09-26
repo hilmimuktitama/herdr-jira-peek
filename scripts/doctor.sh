@@ -41,7 +41,7 @@ decode_config_value() {
 
 read_config() {
   JIRA_BASE='' JIRA_SITE='' JIRA_PROJECTS='' JIRA_BACKEND='' JIRA_NETRC_FILE='' JIRA_CLOUD_ID='' CACHE_TTL_MIN='' MAX_CANDIDATES='' KEY_RE=''
-  PICKER_LAYOUT=bottom
+  PICKER_LAYOUT=bottom SOURCE_HIGHLIGHT=off
   PICKER_FIELDS='status,summary'
   PREVIEW_FIELDS='status,assignee,updated,description,comments'
   READER_FIELDS='status,assignee,updated,link,description,comments'
@@ -86,6 +86,10 @@ read_config() {
       PICKER_LAYOUT=*)
         decode_config_value "${config_line#PICKER_LAYOUT=}" || return 1
         PICKER_LAYOUT=$config_value
+        ;;
+      SOURCE_HIGHLIGHT=*)
+        decode_config_value "${config_line#SOURCE_HIGHLIGHT=}" || return 1
+        SOURCE_HIGHLIGHT=$config_value
         ;;
       KEY_RE=*)
         decode_config_value "${config_line#KEY_RE=}" || return 1
@@ -233,6 +237,10 @@ esac
 case "$PICKER_LAYOUT" in
   top|bottom) ok "PICKER_LAYOUT is valid ($PICKER_LAYOUT)" ;;
   *) fail 'PICKER_LAYOUT must be top or bottom' ;;
+esac
+case "$SOURCE_HIGHLIGHT" in
+  off|auto) ok "SOURCE_HIGHLIGHT is valid ($SOURCE_HIGHLIGHT)" ;;
+  *) fail 'SOURCE_HIGHLIGHT must be off or auto' ;;
 esac
 if preferences_validate_field_list picker "$PICKER_FIELDS"; then
   ok "PICKER_FIELDS is valid (${PICKER_FIELDS:-key only})"
