@@ -5,7 +5,7 @@ Plugin ID: `jira-peek`.
 
 The repository became public on 2026-09-07. Version `0.2.0` was published on
 2026-09-08 as the first versioned release; `0.1.0` was the development baseline.
-The latest release is `0.4.2`, published on 2026-09-25. This project has no
+The latest release is `0.4.3`, published on 2026-09-26. This project has no
 publish automation.
 
 ## Before making the repository public
@@ -44,6 +44,40 @@ publish automation.
   links are not an independent verification of each agreement.
 - [ ] Confirm the reporting inbox receives private security and conduct reports;
   delivery has not been independently tested.
+
+## Version 0.4.3 release validation — 2026-09-26
+
+- [x] Review the optional native decoration worker, owner and terminal identity
+  checks, lease cleanup, picker status, native patch, and publication contents.
+  Fix lost status notifications during fzf startup or failed socket posts; the
+  regression test rejects a temporary copy with the lost-update bug restored.
+  Correct obsolete graphics documentation and include the upstream patch license.
+- [x] Pass the full local offline runtime suite with no skips, including both
+  real fzf/less/Expect layouts, multi-pane behavior, and authentication lifecycle.
+  Pass ShellCheck 0.11.0, shell/Python syntax, manifest checks, local documentation
+  links, and `git diff --check`. Socket and PTY tests required local access outside
+  the sandbox. No live Jira account or existing Herdr session was used.
+- [x] Pass eight socket tests, twelve worker tests, two subprocess/socket
+  integration tests, the highlight UI checks, and the isolated native ANSI
+  rendering regression. Five native Rust renderer tests passed using the existing
+  patched test build; the manual benchmark was not rerun. Confirm the patch applies
+  to the clean pinned upstream revision. Earlier native verification is recorded
+  separately in [native/VERIFICATION.md](native/VERIFICATION.md).
+- [x] Review and scan the prospective public tree, staged changes, and release
+  commit with Gitleaks 8.30.1; no leaks found. No screenshots, binaries, or runtime
+  state were added.
+- [x] Verify Linux and macOS CI on release commit
+  `53239981368a52f3c01f27e56161201c8c194abc`; both jobs passed on their first
+  attempt in [run 36236365759](https://github.com/hilmimuktitama/herdr-jira-peek/actions/runs/36236365759).
+- [x] Publish [v0.4.3](https://github.com/hilmimuktitama/herdr-jira-peek/releases/tag/v0.4.3)
+  from that commit and pin README installation to its full SHA with `--ref`.
+  The subsequent documentation commit records publication; it changes no runtime code.
+
+Source highlighting is off by default and requires Python 3.9+ plus the separate
+Herdr 0.9.1 native patch. Updating only the plugin does not upgrade the running
+Herdr server. Existing configuration remains compatible; close and reopen Peek
+after updating. Source-pane flicker during split creation remains a host-level
+limitation outside this patch.
 
 ## Version 0.4.2 release validation — 2026-09-25
 
